@@ -584,14 +584,16 @@ static int do_compile(Options *opts, const char *root) {
 
 static void append_predefined_macros(Vector *cpp_cmd) {
   vec_push(cpp_cmd, "-D__XCC");
-  vec_push(cpp_cmd, "-D__LP64__");  // Memory model.
 #if XCC_TARGET_ARCH == XCC_ARCH_X64
   vec_push(cpp_cmd, "-D__x86_64__");
 #elif XCC_TARGET_ARCH == XCC_ARCH_AARCH64
   vec_push(cpp_cmd, "-D__aarch64__");
 #elif XCC_TARGET_ARCH == XCC_ARCH_RISCV64
   vec_push(cpp_cmd, "-D__riscv");
+#elif XCC_TARGET_ARCH == XCC_ARCH_XTOY
+  vec_push(cpp_cmd, "-D__xtoy");
 #endif
+
 #if XCC_TARGET_PLATFORM == XCC_PLATFORM_APPLE
   vec_push(cpp_cmd, "-D__APPLE__");
 #elif XCC_TARGET_PLATFORM == XCC_PLATFORM_POSIX
@@ -603,15 +605,23 @@ static void append_predefined_macros(Vector *cpp_cmd) {
 
   vec_push(cpp_cmd, "-D__SIZEOF_POINTER__=" STR(TARGET_POINTER_SIZE));
 #if XCC_TARGET_PROGRAMMING_MODEL == XCC_PROGRAMMING_MODEL_ILP32
+  vec_push(cpp_cmd, "-D__ILP32__");
   vec_push(cpp_cmd, "-D__SIZEOF_INT__=4");
   vec_push(cpp_cmd, "-D__SIZEOF_LONG__=4");
   vec_push(cpp_cmd, "-D__SIZEOF_LONG_LONG__=8");
   vec_push(cpp_cmd, "-D__SIZEOF_SIZE_T__=4");
 #elif XCC_TARGET_PROGRAMMING_MODEL == XCC_PROGRAMMING_MODEL_LP64
+  vec_push(cpp_cmd, "-D__LP64__");
   vec_push(cpp_cmd, "-D__SIZEOF_INT__=4");
   vec_push(cpp_cmd, "-D__SIZEOF_LONG__=8");
   vec_push(cpp_cmd, "-D__SIZEOF_LONG_LONG__=8");
   vec_push(cpp_cmd, "-D__SIZEOF_SIZE_T__=8");
+#elif XCC_TARGET_PROGRAMMING_MODEL == XCC_PROGRAMMING_MODEL_SIP16
+  vec_push(cpp_cmd, "-D__SIP16__");
+  vec_push(cpp_cmd, "-D__SIZEOF_INT__=2");
+  // TODO: Implement 32 bit arithmetic in software as c requires long be at least 32 bit
+  // vec_push(cpp_cmd, "-D__SIZEOF_LONG__=4");
+  vec_push(cpp_cmd, "-D__SIZEOF_SIZE_T__=2");
 #else
 # error "Unsupported programming model"
 #endif

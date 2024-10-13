@@ -11,10 +11,10 @@ LIBSRC_DIR:=libsrc
 LIBOBJ_DIR:=obj/lib
 LIB_DIR:=lib
 
-# NO_FLONUM:=1
-# NO_BITFIELD:=1
-# NO_VLA:=1
-# NO_WCHAR:=1
+NO_FLONUM:=1
+NO_BITFIELD:=1
+NO_VLA:=1
+NO_WCHAR:=1
 
 ifeq ("$(ARCHTYPE)", "")
   ARCHTYPE:=x64

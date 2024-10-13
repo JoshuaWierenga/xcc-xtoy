@@ -5,6 +5,7 @@
 #define XCC_ARCH_AARCH64  2
 #define XCC_ARCH_RISCV64  3
 #define XCC_ARCH_WASM     4
+#define XCC_ARCH_XTOY     5
 
 #if !defined(XCC_TARGET_ARCH)
 # if defined(__WASM)
@@ -24,6 +25,7 @@
 #define XCC_PLATFORM_POSIX  1
 #define XCC_PLATFORM_APPLE  2
 #define XCC_PLATFORM_WASI   3
+#define XCC_PLATFORM_XTOY   4
 
 #if !XCC_TARGET_PLATFORM
 # if defined(__WASM) || XCC_TARGET_ARCH == XCC_ARCH_WASM
@@ -65,14 +67,17 @@
 #define MANGLE_PREFIX  "_"
 #endif
 
-#define TARGET_CHAR_BIT  8
+#define TARGET_CHAR_BIT  16
 
 // Programming model.
 #define XCC_PROGRAMMING_MODEL_ILP32  1
 #define XCC_PROGRAMMING_MODEL_LP64   2
+#define XCC_PROGRAMMING_MODEL_SIP16  3
 
 #if XCC_TARGET_ARCH == XCC_ARCH_WASM
 #define XCC_TARGET_PROGRAMMING_MODEL  XCC_PROGRAMMING_MODEL_ILP32
+#elif XCC_TARGET_ARCH == XCC_ARCH_XTOY
+#define XCC_TARGET_PROGRAMMING_MODEL  XCC_PROGRAMMING_MODEL_SIP16
 #else
 #define XCC_TARGET_PROGRAMMING_MODEL  XCC_PROGRAMMING_MODEL_LP64
 #endif
@@ -81,6 +86,8 @@
 #define TARGET_POINTER_SIZE  4  /*sizeof(void*)*/
 #elif XCC_TARGET_PROGRAMMING_MODEL == XCC_PROGRAMMING_MODEL_LP64
 #define TARGET_POINTER_SIZE  8  /*sizeof(void*)*/
+#elif XCC_TARGET_PROGRAMMING_MODEL == XCC_PROGRAMMING_MODEL_SIP16
+#define TARGET_POINTER_SIZE  2  /*sizeof(void*)*/
 #else
 #error "Unsupported programming model"
 #endif
@@ -101,5 +108,8 @@
 
 #elif XCC_TARGET_ARCH == XCC_ARCH_WASM
 #define MINREGSIZE  (4)
+
+#elif XCC_TARGET_ARCH == XCC_ARCH_XTOY
+#define MINREGSIZE  (2)
 
 #endif

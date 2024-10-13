@@ -33,6 +33,13 @@ static void init_compiler(FILE *ofp) {
   set_fixnum_size(FX_LONG,  4, 4);
   set_fixnum_size(FX_LLONG, 8, 8);
   set_fixnum_size(FX_ENUM,  4, 4);
+#elif XCC_TARGET_PROGRAMMING_MODEL == XCC_PROGRAMMING_MODEL_SIP16
+  set_fixnum_size(FX_CHAR,  2, 2);
+  set_fixnum_size(FX_SHORT, 2, 2);
+  set_fixnum_size(FX_INT,   2, 2);
+  set_fixnum_size(FX_LONG,  0, 0);
+  set_fixnum_size(FX_LLONG, 0, 0);
+  set_fixnum_size(FX_ENUM,  2, 2);
 #else
 # error "Unsupported programming model"
 #endif

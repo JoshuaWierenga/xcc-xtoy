@@ -139,6 +139,8 @@ void emit_comm(const char *label, size_t size, size_t align) {
   // p2align on macOS.
   assert(IS_POWER_OF_2(align));
   align = most_significant_bit(align);
+#elif XCC_TARGET_PLATFORM == XCC_PLATFORM_XTOY
+  error("XTOY asm does not support common symbols");
 #else
   if (align <= 1) {
     emit_asm2(".comm", label, num(size));
@@ -258,7 +260,9 @@ static void emit_varinfo(const VarInfo *varinfo, const Initializer *init) {
     label = quote_label(label);
     _LOCAL(label);
   }
-#if XCC_TARGET_PLATFORM != XCC_PLATFORM_APPLE
+#if XCC_TARGET_PLATFORM == XCC_PLATFORM_XTOY
+  error("XTOY asm does not variable type info");
+#elif XCC_TARGET_PLATFORM != XCC_PLATFORM_APPLE
   EMIT_ASM(".type", quote_label(fmt_name(name)), "@object");
 #endif
 
@@ -341,6 +345,8 @@ static void emit_decls_ctor_dtor(Vector *decls) {
   }
   // For Apple platforms, the constructor function that registers the destructor function is
   // generated, so no need to handle the destructor functions.
+#elif XCC_TARGET_PLATFORM == XCC_PLATFORM_XTOY
+  error("XTOY asm does not support constructors");
 #else
   if (ctors->len > 0) {
     emit_comment(NULL);
