@@ -18,8 +18,8 @@ Type tyVoid =          {.kind=TY_VOID};
 Type tyConstVoid =     {.kind=TY_VOID, .qualifier=TQ_CONST};
 Type tyVoidPtr =       {.kind=TY_PTR, .pa={.ptrof=&tyVoid}};
 Type tyBool =          {.kind=TY_FIXNUM, .fixnum={.kind=FX_BOOL,   .is_unsigned=false}};
-Type tySize =          {.kind=TY_FIXNUM, .fixnum={.kind=FX_LONG,  .is_unsigned=true}};
-Type tySSize =         {.kind=TY_FIXNUM, .fixnum={.kind=FX_LONG,  .is_unsigned=false}};
+Type tySize =          {.kind=TY_FIXNUM, .fixnum={.kind=FX_INT /*FX_LONG*/,  .is_unsigned=true}};
+Type tySSize =         {.kind=TY_FIXNUM, .fixnum={.kind=FX_INT /*FX_LONG*/,  .is_unsigned=false}};
 Type tyFloat =         {.kind=TY_FLONUM, .flonum={.kind=FL_FLOAT}};
 Type tyDouble =        {.kind=TY_FLONUM, .flonum={.kind=FL_DOUBLE}};
 Type tyLDouble =       {.kind=TY_FLONUM, .flonum={.kind=FL_LDOUBLE}};
@@ -192,7 +192,7 @@ size_t type_size(const Type *type) {
   case TY_FLONUM:
     return flonum_size_table[type->flonum.kind];
   case TY_PTR:
-    return fixnum_size_table[FX_LONG];
+    return fixnum_size_table[FX_INT /*FX_LONG*/];
   case TY_ARRAY:
 #ifndef __NO_VLA
     assert(type->pa.vla == NULL);
@@ -218,7 +218,7 @@ size_t align_size(const Type *type) {
   case TY_FLONUM:
     return flonum_align_table[type->flonum.kind];
   case TY_PTR:
-    return fixnum_align_table[FX_LONG];
+    return fixnum_align_table[FX_INT /*FX_LONG*/];
   case TY_ARRAY:
     return align_size(type->pa.ptrof);
   case TY_STRUCT:

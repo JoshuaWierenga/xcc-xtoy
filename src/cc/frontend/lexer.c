@@ -47,7 +47,7 @@ static const struct {
   {"char", TK_CHAR},
   {"short", TK_SHORT},
   {"int", TK_INT},
-  {"long", TK_LONG},
+  // {"long", TK_LONG},
   {"const", TK_CONST},
   {"unsigned", TK_UNSIGNED},
   {"signed", TK_SIGNED},

@@ -37,9 +37,8 @@ static void init_compiler(FILE *ofp) {
   set_fixnum_size(FX_CHAR,  1, 1);
   set_fixnum_size(FX_SHORT, 1, 1);
   set_fixnum_size(FX_INT,   1, 1);
-  // Not actually supported just setting so sizeof(void *) works
-  set_fixnum_size(FX_LONG,  1, 1);
-  set_fixnum_size(FX_LLONG, 0, 0);
+  // set_fixnum_size(FX_LONG,  0, 0);
+  // set_fixnum_size(FX_LLONG, 0, 0);
   set_fixnum_size(FX_ENUM,  1, 1);
 #else
 # error "Unsupported programming model"
