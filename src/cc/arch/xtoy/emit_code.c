@@ -1,8 +1,9 @@
 #include "./arch_config.h"
 #include "emit_code.h"
 
-#include <assert.h>
-#include <inttypes.h>  // PRIx16
+#include <assert.h>    // assert
+#include <inttypes.h>  // PRIX8
+#include <string.h>    // strcmp
 
 #include "ast.h"
 #include "codegen.h"
@@ -70,8 +71,10 @@ void emit_defun(Function *func) {
     global = (varinfo->storage & VS_STATIC) == 0;
   }
 
+  bool is_main = false;
   {
     char *label = format_func_name(func->name, global);
+    is_main = strcmp("main", label) == 0;
     EMIT_ASM(";", label);
   }
 
@@ -98,6 +101,12 @@ void emit_defun(Function *func) {
   unsigned long used_reg_bits = fnbe->ra->used_reg_bits;
   int vaarg_params_saved = 0;
   if (!no_stmt) {
+    // TODO: Only emit this if the stack is needed
+    if (is_main) {
+      LDA(RE, im(0xFF));
+      LDA(RF, im(0xFF));
+    }
+
     if (func->type->func.vaargs) {
       error("var arg functions are not supported");
     }
@@ -144,6 +153,11 @@ void emit_defun(Function *func) {
       error("var arg functions are not supported");
     }
 
-    RET();
+    if (is_main) {
+      STR(R1, im(0xFF));
+      HLT();
+    } else {
+      RET();
+    }
   }
 }

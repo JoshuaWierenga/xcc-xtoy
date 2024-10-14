@@ -24,8 +24,10 @@
 #define SUB(r1, r2, r3) EMIT_ASM("sub", r1, r2, r3) // r1 = r2 - r3
 #define ASL(r1, r2, r3) EMIT_ASM("asl", r1, r2, r3) // r1 = r2 << r3
 #define LDA(r, a)       EMIT_ASM("lda", r, a)       // r = a
+#define STR(r, a)       EMIT_ASM("str", r, a)       // mem[a] = r
 #define LDI(r1, r2)     EMIT_ASM("ldi", r1, r2)     // r1 = mem[r2]
 #define STI(r1, r2)     EMIT_ASM("sti", r1, r2)     // mem[r2] = r1
+#define HLT()           EMIT_ASM("hlt")             // stop CPU
 #define JMP(r)          EMIT_ASM("jmp", r)          // PC = r
 
 // r2 = PTR_SIZE, RF = RF - r2, mem[RF] = r1

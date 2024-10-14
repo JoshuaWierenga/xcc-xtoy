@@ -1,5 +1,5 @@
 #include <stdint.h>
 
-int test(void) {
+int main(void) {
   return sizeof(intmax_t);
 }
