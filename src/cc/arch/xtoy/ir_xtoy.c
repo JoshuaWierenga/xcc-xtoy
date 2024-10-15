@@ -57,6 +57,42 @@ const RegAllocSettings kArchRegAllocSettings = {
 
 //
 
+static void load_val(const char *dst, const char *tmp, int16_t val) {
+  if ((uint16_t)val <= UINT8_MAX) {
+      LDA(dst, im((uint8_t)val));
+  } else {
+    // TODO: Test this
+    /* TODO: 3 words with 2 labels is possible:
+        JMP(label2);
+      label1:
+        EMIT((uint16_t)val);
+      label2:
+        LOD(dst, label1);
+    */
+    /* TODO: 2 words with 1 label may be possible:
+      .SECTION data
+        ...
+      label1:
+        EMIT((uint16_t)val);
+        ...
+      .SECTION text
+        ...
+        LOD(dst, label1);
+    */
+    uint8_t upper = val >> 8;
+    uint8_t lower = val & 0xFF;
+    LDA(tmp, im(upper));
+    LDA(dst, im(8));
+    ASL(dst, tmp, dst);
+    if (lower != 0) {
+      LDA(tmp, im(lower));
+      ADD(dst, tmp, dst);
+    }
+  }
+}
+
+//
+
 static void ei_bofs(IR *ir) {
   UNUSED(ir);
   error(fmt("function %s is not supported", __func__));
@@ -95,8 +131,32 @@ static void ei_store_s(IR *ir) {
 }
 
 static void ei_add(IR *ir) {
-  UNUSED(ir);
-  error(fmt("function %s is not supported", __func__));
+  assert(!(ir->opr1->flag & VRF_CONST));
+  int pow = ir->dst->vsize;
+  assert(0 <= pow && pow < 1);
+  int dstphys = ir->dst->phys;
+  int src1phys = ir->opr1->phys;
+  const char *dst = kReg16s[dstphys];
+  const char *src1 = kReg16s[src1phys];
+  if (ir->opr2->flag & VRF_CONST) {
+    int val = ir->opr2->fixnum;
+    if (0 == val) {
+      // Do nothing
+    } else if ((uint16_t)val <= UINT8_MAX) {
+      LDA(TMP_REG, im((uint8_t)val));
+      ADD(dst, src1, TMP_REG);
+    } else if (dstphys != src1phys) {
+      load_val(dst, TMP_REG, val);
+      ADD(dst, src1, dst);
+    } else {
+      START_PUSH(RET_ADDRESS_REG, TMP_REG);
+      load_val(RET_ADDRESS_REG, TMP_REG, val);
+      ADD(dst, src1, RET_ADDRESS_REG);
+      START_POP(RET_ADDRESS_REG, TMP_REG);
+    }
+  } else {
+    ADD(dst, src1, kReg16s[ir->opr2->phys]);
+  }
 }
 
 static void ei_sub(IR *ir) {
@@ -178,22 +238,11 @@ static void ei_precall(IR *ir) {
 }
 
 static void ei_pusharg(IR *ir) {
+  int pow = ir->opr1->vsize;
+  assert(0 <= pow && pow < 1);
   const char *dst = kReg16s[ir->pusharg.index + ARG_REG_START_INDEX];
   if (ir->opr1->flag & VRF_CONST) {
-    int16_t val = ir->opr1->fixnum;
-    if ((uint16_t)val <= UINT8_MAX) {
-      LDA(dst, im((uint8_t)val));
-    } else {
-      // TODO: Test this
-      // See ei_result copy of this for possible optimisations
-      uint8_t upper = val >> 8;
-      uint8_t lower = val & 0xFF;
-      LDA(dst, im(upper));
-      LDA(TMP_REG, im(8));
-      ASL(TMP_REG, dst, TMP_REG);
-      LDA(dst, im(lower));
-      ADD(dst, dst, TMP_REG);
-    }
+    load_val(dst, TMP_REG, ir->opr1->fixnum);
   }
   else if (ir->pusharg.index != ir->opr1->phys) {
     MOV(dst, kReg16s[ir->opr1->phys]);
@@ -213,40 +262,11 @@ static void ei_call(IR *ir) {
 
 static void ei_result(IR *ir) {
   int pow = ir->opr1->vsize;
-  assert(0 <= pow && pow < 4);
+  assert(0 <= pow && pow < 1);
   int dstphys = ir->dst != NULL ? ir->dst->phys : INT_RET_REG_INDEX;
   const char *dst = kReg16s[dstphys];
   if (ir->opr1->flag & VRF_CONST) {
-    int16_t val = ir->opr1->fixnum;
-    if ((uint16_t)val <= UINT8_MAX) {
-      LDA(dst, im((uint8_t)val));
-    } else {
-      // TODO: Test this
-      /* TODO: 3 words with 2 labels is possible:
-          JMP(label2);
-        label1:
-          EMIT((uint16_t)val);
-        label2:
-          LOD(dst, label1);
-      */
-      /* TODO: 2 words with 1 label may be possible:
-        .SECTION data
-          ...
-        label1:
-          EMIT((uint16_t)val);
-          ...
-        .SECTION text
-          ...
-          LOD(dst, label1);
-      */
-      uint8_t upper = val >> 8;
-      uint8_t lower = val & 0xFF;
-      LDA(dst, im(upper));
-      LDA(TMP_REG, im(8));
-      ASL(TMP_REG, dst, TMP_REG);
-      LDA(dst, im(lower));
-      ADD(dst, dst, TMP_REG);
-    }
+    load_val(dst, TMP_REG, ir->opr1->fixnum);
   } else if (ir->opr1->phys != dstphys) {
     MOV(dst, kReg16s[ir->opr1->phys]);
   }
