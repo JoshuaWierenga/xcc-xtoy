@@ -20,16 +20,21 @@
 //   RE:    Frame pointer (Callee saved)
 //   RF:    Stack pointer (Globally saved)
 
+static Vector *push_caller_save_regs(unsigned long living);
+
 const char *kReg16s[PHYSICAL_REG_MAX] = {
   R1, R2, R3, R4, R5, R6, // Caller saved
   R7, R8,                 // Temporary
   R9, RA, RB, RC, RD, RE  // Callee saved
 };
 
-#define GET_R1_INDEX() 0
+#define INT_RET_REG_INDEX 0
 
 #define CALLEE_SAVE_REG_COUNT  ((int)ARRAY_SIZE(kCalleeSaveRegs))
 static const int kCalleeSaveRegs[] = {8, 9, 10, 11, 12, 13};
+
+#define CALLER_SAVE_REG_COUNT  ((int)ARRAY_SIZE(kCallerSaveRegs))
+static const int kCallerSaveRegs[] = {0, 1, 2, 3, 4, 5, 6};
 
 const int ArchRegParamMapping[] = {0, 1, 2, 3, 4, 5};
 
@@ -71,7 +76,7 @@ static void ei_load(IR *ir) {
   error(fmt("function %s is not support", __func__));
 }
 
-// TODO: Merge with ei_load
+// TODO: Merge with ei_load?
 static void ei_load_s(IR *ir) {
   UNUSED(ir);
   error(fmt("function %s is not support", __func__));
@@ -82,7 +87,7 @@ static void ei_store(IR *ir) {
   error(fmt("function %s is not support", __func__));
 }
 
-// TODO: Merge with ei_store
+// TODO: Merge with ei_store?
 static void ei_store_s(IR *ir) {
   UNUSED(ir);
   error(fmt("function %s is not support", __func__));
@@ -164,8 +169,11 @@ static void ei_tjmp(IR *ir) {
 }
 
 static void ei_precall(IR *ir) {
-  UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  // Living registers are not modified between preparing function arguments,
+  // so safely saved before calculating argument values.
+  ir->precall.caller_saves = push_caller_save_regs(ir->precall.living_pregs);
+  ir->precall.stack_aligned = (MAX_ALIGN - (ir->precall.stack_args_size)) & (MAX_ALIGN - 1);
+  // TODO: Is the SP sub from other targets required here?
 }
 
 static void ei_pusharg(IR *ir) {
@@ -174,14 +182,23 @@ static void ei_pusharg(IR *ir) {
 }
 
 static void ei_call(IR *ir) {
-  UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  if (ir->call.label != NULL) {
+    char *label = fmt_name(ir->call.label);
+    if (ir->call.global) {
+      label = MANGLE(label);
+    }
+    label = fmt("$%s", quote_label(label));
+    JSR(RET_ADDRESS_REG, label);
+  } else {
+    assert(!(ir->opr1->flag & VRF_CONST));
+    error("Jumping to register address is not supported");
+  }
 }
 
 static void ei_result(IR *ir) {
   int pow = ir->opr1->vsize;
   assert(0 <= pow && pow < 4);
-  int dstphys = ir->dst != NULL ? ir->dst->phys : GET_R1_INDEX();
+  int dstphys = ir->dst != NULL ? ir->dst->phys : INT_RET_REG_INDEX;
   const char *dst = kReg16s[dstphys];
   if (ir->opr1->flag & VRF_CONST) {
     int16_t val = ir->opr1->fixnum;
@@ -209,10 +226,10 @@ static void ei_result(IR *ir) {
       uint8_t upper = val >> 8;
       uint8_t lower = val & 0xFF;
       LDA(dst, im(upper));
-      LDA(R7, im(8));
-      ASL(R7, dst, R7);
+      LDA(TMP_REG, im(8));
+      ASL(TMP_REG, dst, TMP_REG);
       LDA(dst, im(lower));
-      ADD(dst, dst, R7);
+      ADD(dst, dst, TMP_REG);
     }
   } else if (ir->opr1->phys != dstphys) {
     MOV(dst, kReg16s[ir->opr1->phys]);
@@ -262,11 +279,12 @@ int push_callee_save_regs(unsigned long used, unsigned long fused) {
   int count = 0;
   for (int i = 0; i < CALLEE_SAVE_REG_COUNT; ++i) {
     int ireg = kCalleeSaveRegs[i];
-    if (used & (1 << ireg)) {
+    if (used & (1UL << ireg)) {
+      const char *reg = kReg16s[ireg];
       if (count == 0) {
-        START_PUSH(kReg16s[ireg], R7);
+        START_PUSH(reg, TMP_REG);
       } else {
-        CONTINUE_PUSH(kReg16s[ireg], R7);
+        CONTINUE_PUSH(reg, TMP_REG);
       }
       ++count;
     }
@@ -276,15 +294,16 @@ int push_callee_save_regs(unsigned long used, unsigned long fused) {
 
 void pop_callee_save_regs(unsigned long used, unsigned long fused) {
   UNUSED(fused);
-  bool noMoves = true;
+  bool no_moves = true;
   for (int i = CALLEE_SAVE_REG_COUNT; --i >= 0;) {
     int ireg = kCalleeSaveRegs[i];
-    if (used & (1 << ireg)) {
-      if (noMoves) {
-        START_POP(kReg16s[ireg], R7);
-        noMoves = false;
+    if (used & (1UL << ireg)) {
+      const char *reg = kReg16s[ireg];
+      if (no_moves) {
+        START_POP(reg, TMP_REG);
+        no_moves = false;
       } else {
-        CONTINUE_POP(kReg16s[ireg], R7);
+        CONTINUE_POP(reg, TMP_REG);
       }
     }
   }
@@ -296,6 +315,25 @@ int calculate_func_param_bottom(Function *func) {
   int callee_save_count = count_callee_save_regs(used);
 
   return (callee_save_count * TARGET_POINTER_SIZE) + (TARGET_POINTER_SIZE * 2);  // Return address, saved base pointer.
+}
+
+static Vector *push_caller_save_regs(unsigned long living) {
+  Vector *saves = new_vector();
+
+  for (int i = 0; i < CALLER_SAVE_REG_COUNT; ++i) {
+    int ireg = kCallerSaveRegs[i];
+    if (living & (1UL << ireg)) {
+      const char *reg = kReg16s[ireg];
+      if (saves->len == 0) {
+        START_PUSH(reg, TMP_REG);
+      } else {
+        CONTINUE_PUSH(reg, TMP_REG);
+      }
+      vec_push(saves, reg);
+    }
+  }
+
+  return saves;
 }
 
 void emit_bb_irs(BBContainer *bbcon) {

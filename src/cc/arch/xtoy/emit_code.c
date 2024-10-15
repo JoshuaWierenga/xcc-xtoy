@@ -3,6 +3,7 @@
 
 #include <assert.h>    // assert
 #include <inttypes.h>  // PRIX8
+#include <stdbool.h>
 #include <string.h>    // strcmp
 
 #include "ast.h"
@@ -13,6 +14,10 @@
 #include "util.h"
 #include "var.h"
 #include "xtoy.h"
+
+static bool no_emits = true;
+
+//
 
 const char *im(uint8_t x) {
   return fmt("%02" PRIX8, x);
@@ -28,7 +33,7 @@ static void move_params_to_assigned(Function *func) {
   extern const char *kReg16s[];
   extern const int ArchRegParamMapping[];
 
-  bool noMoves = true;
+  bool no_noves = true;
   RegParamInfo iparams[MAX_REG_ARGS];
   int iparam_count = 0;
   int fparam_count = 0;
@@ -44,11 +49,11 @@ static void move_params_to_assigned(Function *func) {
     assert(IS_POWER_OF_2(size) && pow < 4);
     const char *src = kReg16s[ArchRegParamMapping[p->index]];
     if (vreg->flag & VRF_SPILLED) {
-      if (noMoves) {
-        START_PUSH(src, R7);
-        noMoves = false;
+      if (no_noves) {
+        START_PUSH(src, TMP_REG);
+        no_noves = false;
       } else {
-        CONTINUE_PUSH(src, R7);
+        CONTINUE_PUSH(src, TMP_REG);
       }
     } else if (ArchRegParamMapping[p->index] != vreg->phys) {
       const char *dst = kReg16s[vreg->phys];
@@ -57,11 +62,15 @@ static void move_params_to_assigned(Function *func) {
   }
 }
 
-// TODO: Add specific prologue and epilogue for main function
 void emit_defun(Function *func) {
   if (func->scopes == NULL ||  // Prototype definition.
       func->extra == NULL)     // Code emission is omitted.
     return;
+
+  if (no_emits) {
+    BRZ(R0, "$main");
+    no_emits = false;
+  }
 
   emit_comment(NULL);
 
@@ -75,7 +84,7 @@ void emit_defun(Function *func) {
   {
     char *label = format_func_name(func->name, global);
     is_main = strcmp("main", label) == 0;
-    EMIT_ASM(";", label);
+    EMIT_LABEL(label);
   }
 
   bool no_stmt = true;
@@ -95,16 +104,18 @@ void emit_defun(Function *func) {
   // Prologue
   // Allocate variable bufer.
   FuncBackend *fnbe = func->extra;
-  size_t frame_size = ALIGN(fnbe->frame_size, 2 * PTR_SIZE);
+  size_t frame_size = ALIGN(fnbe->frame_size, MAX_ALIGN);
   bool fp_saved = false;  // Frame pointer saved?
   bool ra_saved = false;  // Return Address register saved?
   unsigned long used_reg_bits = fnbe->ra->used_reg_bits;
   int vaarg_params_saved = 0;
   if (!no_stmt) {
     // TODO: Only emit this if the stack is needed
+    // func->flag & (FUNCF_HAS_FUNCALL | FUNCF_STACK_MODIFIED)?
+    // fp_saved?
     if (is_main) {
-      LDA(RE, im(0xFF));
-      LDA(RF, im(0xFF));
+      LDA(FRAME_PTR_REG, im(0xFF));
+      LDA(STACK_PTR_REG, im(0xFF));
     }
 
     if (func->type->func.vaargs) {
@@ -112,12 +123,18 @@ void emit_defun(Function *func) {
     }
 
     fp_saved = frame_size > 0 || fnbe->ra->flag & RAF_STACK_FRAME;
-    ra_saved = (func->flag & FUNCF_HAS_FUNCALL) != 0;
+    ra_saved = !is_main && (func->flag & FUNCF_HAS_FUNCALL) != 0;
 
-    // TODO: Handle fp_saved and ra_saved individually.
-    if (fp_saved || ra_saved) {
-      START_PUSH(R8, R7);
-      CONTINUE_PUSH(RE, R7);
+    if (ra_saved) {
+      START_PUSH(RET_ADDRESS_REG, TMP_REG);
+    }
+
+    if (fp_saved) {
+      if (ra_saved) {
+        CONTINUE_PUSH(FRAME_PTR_REG, TMP_REG);
+      } else {
+        START_PUSH(FRAME_PTR_REG, TMP_REG);
+      }
 
       // FP is saved, so omit from callee save.
       used_reg_bits &= ~(1UL << GET_FPREG_INDEX());
@@ -127,7 +144,7 @@ void emit_defun(Function *func) {
     push_callee_save_regs(used_reg_bits, fnbe->ra->used_freg_bits);
 
     if (fp_saved) {
-      MOV(RE, RF);
+      MOV(FRAME_PTR_REG, STACK_PTR_REG);
     }
 
     move_params_to_assigned(func);
@@ -139,14 +156,21 @@ void emit_defun(Function *func) {
     // Epilogue
     if (!no_stmt) {
       if (fp_saved) {
-        MOV(RF, RE);
+        MOV(STACK_PTR_REG, FRAME_PTR_REG);
       }
 
       pop_callee_save_regs(used_reg_bits, fnbe->ra->used_freg_bits);
 
-      if (fp_saved || ra_saved) {
-        START_POP(RE, R7);
-        CONTINUE_POP(R8, R7);
+      if (fp_saved) {
+        START_POP(FRAME_PTR_REG, TMP_REG);
+      }
+
+      if (ra_saved) {
+        if (fp_saved) {
+          CONTINUE_POP(RET_ADDRESS_REG, TMP_REG);
+        } else {
+          START_POP(RET_ADDRESS_REG, TMP_REG);
+        }
       }
     }
     if (vaarg_params_saved > 0) {

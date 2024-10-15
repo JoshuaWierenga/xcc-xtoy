@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../../../config.h"
+
 #include "emit_util.h"
 
 #define R0 "r0" // Zero Register
@@ -19,6 +21,11 @@
 #define RE "rE" // Frame Pointer
 #define RF "rF" // Stack Pointer
 
+#define TMP_REG         R7
+#define RET_ADDRESS_REG R8
+#define FRAME_PTR_REG   RE
+#define STACK_PTR_REG   RF
+
 
 #define ADD(r1, r2, r3) EMIT_ASM("add", r1, r2, r3) // r1 = r2 + r3
 #define SUB(r1, r2, r3) EMIT_ASM("sub", r1, r2, r3) // r1 = r2 - r3
@@ -28,28 +35,30 @@
 #define LDI(r1, r2)     EMIT_ASM("ldi", r1, r2)     // r1 = mem[r2]
 #define STI(r1, r2)     EMIT_ASM("sti", r1, r2)     // mem[r2] = r1
 #define HLT()           EMIT_ASM("hlt")             // stop CPU
+#define BRZ(r, a)       EMIT_ASM("brz", r, a)       // if (r == 0): PC = a
 #define JMP(r)          EMIT_ASM("jmp", r)          // PC = r
+#define JSR(r, a)       EMIT_ASM("jsr", r, a)       // r = PC, PC = a
 
-// r2 = PTR_SIZE, RF = RF - r2, mem[RF] = r1
-#define START_PUSH(r1, r2) \
-  LDA(r2, im(PTR_SIZE));   \
+// r2 = PTR_SIZE, STACK_PTR_REG = STACK_PTR_REG - r2, mem[STACK_PTR_REG] = r1
+#define START_PUSH(r1, r2)          \
+  LDA(r2, im(TARGET_POINTER_SIZE)); \
   CONTINUE_PUSH(r1, r2)
 
-// RF = RF - r2, mem[RF] = r1
-#define CONTINUE_PUSH(r1, r2) \
-  SUB(RF, RF, r2);            \
-  STI(r1, RF)
+// STACK_PTR_REG = STACK_PTR_REG - r2, mem[STACK_PTR_REG] = r1
+#define CONTINUE_PUSH(r1, r2)            \
+  SUB(STACK_PTR_REG, STACK_PTR_REG, r2); \
+  STI(r1, STACK_PTR_REG)
 
-// r2 = PTR_SIZE, r1 = mem[RF], RF = RF + r2
-#define START_POP(r1, r2) \
-  LDA(r2, im(PTR_SIZE));  \
+// r2 = PTR_SIZE, r1 = mem[STACK_PTR_REG], STACK_PTR_REG = STACK_PTR_REG + r2
+#define START_POP(r1, r2)           \
+  LDA(r2, im(TARGET_POINTER_SIZE)); \
   CONTINUE_POP(r1, r2)
 
-// r1 = mem[RF], RF = RF + r2
+// r1 = mem[STACK_PTR_REG], STACK_PTR_REG = STACK_PTR_REG + r2
 #define CONTINUE_POP(r1, r2) \
-  LDI(r1, RF);               \
-  ADD(RF, RF, r2)
+  LDI(r1, STACK_PTR_REG);    \
+  ADD(STACK_PTR_REG, STACK_PTR_REG, r2)
 
 #define MOV(r1, r2) ADD(r1, r2, R0) // r1 = r2 + R0(0) i.e. r1 = r2
 
-#define RET() JMP(R8) // PC = R8
+#define RET() JMP(RET_ADDRESS_REG) // PC = RET_ADDRESS_REG

@@ -87,7 +87,7 @@
 #elif XCC_TARGET_PROGRAMMING_MODEL == XCC_PROGRAMMING_MODEL_LP64
 #define TARGET_POINTER_SIZE  8  /*sizeof(void*)*/
 #elif XCC_TARGET_PROGRAMMING_MODEL == XCC_PROGRAMMING_MODEL_SIP16
-#define TARGET_POINTER_SIZE  2  /*sizeof(void*)*/
+#define TARGET_POINTER_SIZE  1  /*sizeof(void*)*/
 #else
 #error "Unsupported programming model"
 #endif
