@@ -195,7 +195,7 @@ static void ei_pusharg(IR *ir) {
       ADD(dst, dst, TMP_REG);
     }
   }
-  if (ir->pusharg.index != ir->opr1->phys) {
+  else if (ir->pusharg.index != ir->opr1->phys) {
     MOV(dst, kReg16s[ir->opr1->phys]);
   }
 }
