@@ -29,6 +29,7 @@ const char *kReg16s[PHYSICAL_REG_MAX] = {
 };
 
 #define INT_RET_REG_INDEX 0
+#define ARG_REG_START_INDEX 0
 
 #define CALLEE_SAVE_REG_COUNT  ((int)ARRAY_SIZE(kCalleeSaveRegs))
 static const int kCalleeSaveRegs[] = {8, 9, 10, 11, 12, 13};
@@ -58,114 +59,114 @@ const RegAllocSettings kArchRegAllocSettings = {
 
 static void ei_bofs(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_iofs(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_sofs(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_load(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 // TODO: Merge with ei_load?
 static void ei_load_s(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_store(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 // TODO: Merge with ei_store?
 static void ei_store_s(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_add(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_sub(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_mul(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_div(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_mod(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_bitand(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_bitor(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_bitxor(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_lshift(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_rshift(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_neg(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_bitnot(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_cond(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_jmp(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_tjmp(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_precall(IR *ir) {
@@ -177,17 +178,32 @@ static void ei_precall(IR *ir) {
 }
 
 static void ei_pusharg(IR *ir) {
-  UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  const char *dst = kReg16s[ir->pusharg.index + ARG_REG_START_INDEX];
+  if (ir->opr1->flag & VRF_CONST) {
+    int16_t val = ir->opr1->fixnum;
+    if ((uint16_t)val <= UINT8_MAX) {
+      LDA(dst, im((uint8_t)val));
+    } else {
+      // TODO: Test this
+      // See ei_result copy of this for possible optimisations
+      uint8_t upper = val >> 8;
+      uint8_t lower = val & 0xFF;
+      LDA(dst, im(upper));
+      LDA(TMP_REG, im(8));
+      ASL(TMP_REG, dst, TMP_REG);
+      LDA(dst, im(lower));
+      ADD(dst, dst, TMP_REG);
+    }
+  }
+  if (ir->pusharg.index != ir->opr1->phys) {
+    MOV(dst, kReg16s[ir->opr1->phys]);
+  }
 }
 
 static void ei_call(IR *ir) {
   if (ir->call.label != NULL) {
-    char *label = fmt_name(ir->call.label);
-    if (ir->call.global) {
-      label = MANGLE(label);
-    }
-    label = fmt("$%s", quote_label(label));
+    char *label = format_func_name(ir->call.label, ir->call.global);
+    label = fmt("$%s", label);
     JSR(RET_ADDRESS_REG, label);
   } else {
     assert(!(ir->opr1->flag & VRF_CONST));
@@ -238,27 +254,27 @@ static void ei_result(IR *ir) {
 
 static void ei_subsp(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_cast(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_mov(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_keep(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 static void ei_asm(IR *ir) {
   UNUSED(ir);
-  error(fmt("function %s is not support", __func__));
+  error(fmt("function %s is not supported", __func__));
 }
 
 //

@@ -1,9 +1,9 @@
 #include <stdint.h>
 
-int test(void) {
-  return sizeof(intmax_t);
+int test(int a) {
+  return a;
 }
 
 int main(void) {
-  return test();
+  return test(sizeof(intmax_t));
 }
