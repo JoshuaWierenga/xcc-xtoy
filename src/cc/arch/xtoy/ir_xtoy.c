@@ -1,8 +1,9 @@
 #include "../../../config.h"
 #include "./arch_config.h"
 
-#include <assert.h>
+#include <assert.h>  // assert
 #include <stdbool.h>
+#include <inttypes.h> // PRIu16, PRIX16
 
 #include "ast.h"
 #include "emit_code.h"
@@ -57,18 +58,12 @@ const RegAllocSettings kArchRegAllocSettings = {
 
 //
 
-static void load_val(const char *dst, const char *tmp, int16_t val) {
+static void load_val(const char *dst, int16_t val) {
+  static uint16_t labelCount = 0;
+
   if ((uint16_t)val <= UINT8_MAX) {
       LDA(dst, im((uint8_t)val));
   } else {
-    // TODO: Test this
-    /* TODO: 3 words with 2 labels is possible:
-        JMP(label2);
-      label1:
-        EMIT((uint16_t)val);
-      label2:
-        LOD(dst, label1);
-    */
     /* TODO: 2 words with 1 label may be possible:
       .SECTION data
         ...
@@ -79,15 +74,19 @@ static void load_val(const char *dst, const char *tmp, int16_t val) {
         ...
         LOD(dst, label1);
     */
-    uint8_t upper = val >> 8;
-    uint8_t lower = val & 0xFF;
-    LDA(tmp, im(upper));
-    LDA(dst, im(8));
-    ASL(dst, tmp, dst);
-    if (lower != 0) {
-      LDA(tmp, im(lower));
-      ADD(dst, tmp, dst);
-    }
+    const char *label1 = fmt("%s%" PRIu16, "label_", labelCount);
+    const char *label1_ref = fmt("$%s", label1);
+    ++labelCount;
+    const char *label2 = fmt("%s%" PRIu16, "label_", labelCount);
+    const char *label2_ref = fmt("$%s", label2);
+    ++labelCount;
+    const char *im_val = fmt("%04" PRIX16, val);
+
+    BRZ(R0, label2_ref);
+    EMIT_LABEL(label1);
+    EMIT_ASM(".WORD", im_val);
+    EMIT_LABEL(label2);
+    LOD(dst, label1_ref);
   }
 }
 
@@ -142,17 +141,9 @@ static void ei_add(IR *ir) {
     int val = ir->opr2->fixnum;
     if (0 == val) {
       // Do nothing
-    } else if ((uint16_t)val <= UINT8_MAX) {
-      LDA(TMP_REG, im((uint8_t)val));
-      ADD(dst, src1, TMP_REG);
-    } else if (dstphys != src1phys) {
-      load_val(dst, TMP_REG, val);
-      ADD(dst, src1, dst);
     } else {
-      START_PUSH(RET_ADDRESS_REG, TMP_REG);
-      load_val(RET_ADDRESS_REG, TMP_REG, val);
-      ADD(dst, src1, RET_ADDRESS_REG);
-      START_POP(RET_ADDRESS_REG, TMP_REG);
+      load_val(TMP_REG, val);
+      ADD(dst, src1, TMP_REG);
     }
   } else {
     ADD(dst, src1, kReg16s[ir->opr2->phys]);
@@ -242,7 +233,7 @@ static void ei_pusharg(IR *ir) {
   assert(0 <= pow && pow < 1);
   const char *dst = kReg16s[ir->pusharg.index + ARG_REG_START_INDEX];
   if (ir->opr1->flag & VRF_CONST) {
-    load_val(dst, TMP_REG, ir->opr1->fixnum);
+    load_val(dst, ir->opr1->fixnum);
   }
   else if (ir->pusharg.index != ir->opr1->phys) {
     MOV(dst, kReg16s[ir->opr1->phys]);
@@ -266,7 +257,7 @@ static void ei_result(IR *ir) {
   int dstphys = ir->dst != NULL ? ir->dst->phys : INT_RET_REG_INDEX;
   const char *dst = kReg16s[dstphys];
   if (ir->opr1->flag & VRF_CONST) {
-    load_val(dst, TMP_REG, ir->opr1->fixnum);
+    load_val(dst, ir->opr1->fixnum);
   } else if (ir->opr1->phys != dstphys) {
     MOV(dst, kReg16s[ir->opr1->phys]);
   }

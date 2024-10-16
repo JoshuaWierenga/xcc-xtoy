@@ -31,6 +31,7 @@
 #define SUB(r1, r2, r3) EMIT_ASM("sub", r1, r2, r3) // r1 = r2 - r3
 #define ASL(r1, r2, r3) EMIT_ASM("asl", r1, r2, r3) // r1 = r2 << r3
 #define LDA(r, a)       EMIT_ASM("lda", r, a)       // r = a
+#define LOD(r, a)       EMIT_ASM("lod", r, a)       // r = mem[a]
 #define STR(r, a)       EMIT_ASM("str", r, a)       // mem[a] = r
 #define LDI(r1, r2)     EMIT_ASM("ldi", r1, r2)     // r1 = mem[r2]
 #define STI(r1, r2)     EMIT_ASM("sti", r1, r2)     // mem[r2] = r1
