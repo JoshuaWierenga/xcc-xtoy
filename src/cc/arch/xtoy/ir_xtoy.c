@@ -80,7 +80,10 @@ static void load_val(const char *dst, int16_t val) {
     const char *label2 = fmt("%s%" PRIu16, "label_", labelCount);
     const char *label2_ref = fmt("$%s", label2);
     ++labelCount;
-    const char *im_val = fmt("%04" PRIX16, val);
+    // For some reason PRIX16 is "X" on glibc, casting to uint16_t
+    // appears to give the correct output, PRId16 would have caused
+    // more issues(-001 vs 65535 as output for hd and d respectively).
+    const char *im_val = fmt("%04" PRIX16, (uint16_t)val);
 
     BRZ(R0, label2_ref);
     EMIT_LABEL(label1);

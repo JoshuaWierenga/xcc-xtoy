@@ -1,7 +1,7 @@
 #include <stdint.h>
 
-int add(int a, int b) {
-  return a + b;
+int test(void) {
+  return -1;
 }
 
 int add_redundant(int a) {
@@ -17,9 +17,9 @@ int add_word(int a) {
 }
 
 int main(void) {
-  add(1, 2);
   add_redundant(1);
   add_halfword(1);
+  add_word(1);
 
-  return add_word(1);
+  return test();
 }
