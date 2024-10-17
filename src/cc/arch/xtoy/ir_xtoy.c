@@ -1,44 +1,46 @@
 #include "../../../config.h"
 #include "./arch_config.h"
 
-#include <assert.h>  // assert
-#include <stdbool.h>
+#include <assert.h>   // assert
 #include <inttypes.h> // PRIu16, PRIX16
+#include <stdbool.h>
+#include <stdlib.h>   // free
 
 #include "ast.h"
 #include "emit_code.h"
 #include "regalloc.h"
 #include "util.h"
+#include "xasprintf.h"
 #include "xtoy.h"
 
 // Register allocator
 
 // X-Toy: Registers
 //   R0:    Zero register
-//   R1-R8: Integer argument registers (Caller saved), R1 is also the integer return register
+//   R1-R5: Integer argument registers (Caller saved), R1 is also the integer return register
 //   R7-R8: Temporary registers, R8 is also the return address
 //   R9-RD: Callee saved
 //   RE:    Frame pointer (Callee saved)
 //   RF:    Stack pointer (Globally saved)
 
 static Vector *push_caller_save_regs(unsigned long living);
+static void pop_caller_save_regs(Vector *saves);
 
 const char *kReg16s[PHYSICAL_REG_MAX] = {
-  R1, R2, R3, R4, R5, R6, // Caller saved
-  R7, R8,                 // Temporary
+  R1, R2, R3, R4, R5,     // Caller saved
+  R6, R7, R8,             // Temporary
   R9, RA, RB, RC, RD, RE  // Callee saved
 };
 
 #define INT_RET_REG_INDEX 0
-#define ARG_REG_START_INDEX 0
 
 #define CALLEE_SAVE_REG_COUNT  ((int)ARRAY_SIZE(kCalleeSaveRegs))
 static const int kCalleeSaveRegs[] = {8, 9, 10, 11, 12, 13};
 
 #define CALLER_SAVE_REG_COUNT  ((int)ARRAY_SIZE(kCallerSaveRegs))
-static const int kCallerSaveRegs[] = {0, 1, 2, 3, 4, 5, 6};
+static const int kCallerSaveRegs[] = {0, 1, 2, 3, 4};
 
-const int ArchRegParamMapping[] = {0, 1, 2, 3, 4, 5};
+const int ArchRegParamMapping[] = {0, 1, 2, 3, 4};
 
 static unsigned long detect_extra_occupied(RegAlloc *ra, IR *ir) {
   UNUSED(ir);
@@ -58,9 +60,9 @@ const RegAllocSettings kArchRegAllocSettings = {
 
 //
 
-static void load_val(const char *dst, int16_t val) {
-  static uint16_t labelCount = 0;
+static uint16_t labelCount = 0;
 
+static void load_val(const char *dst, int16_t val) {
   if ((uint16_t)val <= UINT8_MAX) {
       LDA(dst, im((uint8_t)val));
   } else {
@@ -75,21 +77,19 @@ static void load_val(const char *dst, int16_t val) {
         LOD(dst, label1);
     */
     const char *label1 = fmt("%s%" PRIu16, "label_", labelCount);
-    const char *label1_ref = fmt("$%s", label1);
     ++labelCount;
     const char *label2 = fmt("%s%" PRIu16, "label_", labelCount);
-    const char *label2_ref = fmt("$%s", label2);
     ++labelCount;
     // For some reason PRIX16 is "X" on glibc, casting to uint16_t
     // appears to give the correct output, PRId16 would have caused
     // more issues(-001 vs 65535 as output for hd and d respectively).
     const char *im_val = fmt("%04" PRIX16, (uint16_t)val);
 
-    BRZ(R0, label2_ref);
+    BRZ(R0, label2);
     EMIT_LABEL(label1);
     EMIT_ASM(".WORD", im_val);
     EMIT_LABEL(label2);
-    LOD(dst, label1_ref);
+    LOD(dst, label1);
   }
 }
 
@@ -145,8 +145,8 @@ static void ei_add(IR *ir) {
     if (0 == val) {
       // Do nothing
     } else {
-      load_val(TMP_REG, val);
-      ADD(dst, src1, TMP_REG);
+      load_val(TMP_1_REG, val);
+      ADD(dst, src1, TMP_1_REG);
     }
   } else {
     ADD(dst, src1, kReg16s[ir->opr2->phys]);
@@ -154,8 +154,24 @@ static void ei_add(IR *ir) {
 }
 
 static void ei_sub(IR *ir) {
-  UNUSED(ir);
-  error(fmt("function %s is not supported", __func__));
+  assert(!(ir->opr1->flag & VRF_CONST));
+  int pow = ir->dst->vsize;
+  assert(0 <= pow && pow < 1);
+  int dstphys = ir->dst->phys;
+  int src1phys = ir->opr1->phys;
+  const char *dst = kReg16s[dstphys];
+  const char *src1 = kReg16s[src1phys];
+  if (ir->opr2->flag & VRF_CONST) {
+    int val = ir->opr2->fixnum;
+    if (0 == val) {
+      // Do nothing
+    } else {
+      load_val(TMP_1_REG, val);
+      SUB(dst, src1, TMP_1_REG);
+    }
+  } else {
+    SUB(dst, src1, kReg16s[ir->opr2->phys]);
+  }
 }
 
 static void ei_mul(IR *ir) {
@@ -214,8 +230,121 @@ static void ei_cond(IR *ir) {
 }
 
 static void ei_jmp(IR *ir) {
-  UNUSED(ir);
-  error(fmt("function %s is not supported", __func__));
+  const char *label_true = fmt_name(ir->jmp.bb->label);
+  int cond = ir->jmp.cond;
+  if (cond == COND_ANY) {
+    BRZ(R0, label_true);
+    return;
+  }
+
+  assert(!(ir->opr1->flag & VRF_CONST));
+  const char *opr1 = kReg16s[ir->opr1->phys];
+
+  const char *opr2;
+  if (ir->opr2->flag & VRF_CONST) {
+    if (ir->opr2->fixnum == 0) {
+      opr2 = R0;
+    } else {
+      // TODO: Optimise by flipping LHS(X >= Y => Y <= X)
+      // With opr1 as a constant we can remove most of the cases
+      load_val(TMP_2_REG, ir->opr2->fixnum);
+      opr2 = TMP_2_REG;
+    }
+  } else {
+    opr2 = kReg16s[ir->opr2->phys];
+  }
+
+  const char *label_false = xasprintf("%s%" PRIu16, "label_", labelCount);
+  ++labelCount;
+
+  switch (cond) {
+    case COND_EQ | COND_UNSIGNED:
+    case COND_EQ:
+      error("JMP EQ is not supported");
+      break;
+
+    case COND_NE | COND_UNSIGNED:
+    case COND_NE:
+      error("JMP NE is not supported");
+    break;
+
+    case COND_LT:
+      error("JMP LT is not supported");
+      break;
+    case COND_GT:
+      error("JMP GT is not supported");
+      break;
+    case COND_LE:
+      error("JMP LE is not supported");
+      break;
+    case COND_GE: {
+        // Intro
+        const char *label_1gtz = xasprintf("%s%" PRIu16, "label_", labelCount);
+        ++labelCount;
+        const char *label_1ez = xasprintf("%s%" PRIu16, "label_", labelCount);
+        ++labelCount;
+        const char *label_1ltz = xasprintf("%s%" PRIu16, "label_", labelCount);
+        ++labelCount;
+
+        BRP(opr1, label_1gtz);
+        BRZ(opr1, label_1ez);
+        BRZ(R0, label_1ltz);
+
+        // opr1 > 0 cases:
+        const char *label_1gtz_2gtz = xasprintf("%s%" PRIu16, "label_", labelCount);
+        ++labelCount;
+
+        EMIT_LABEL(label_1gtz);
+        BRP(opr2, label_1gtz_2gtz);
+        BRZ(R0, label_true);
+        EMIT_LABEL(label_1gtz_2gtz);
+        load_val(TMP_1_REG, 1);
+        SUB(TMP_1_REG, TMP_1_REG, opr2);
+        ADD(TMP_1_REG, TMP_1_REG, opr1);
+        BRP(TMP_1_REG, label_true);
+        BRZ(R0, label_false);
+
+        // opr1 == 0 cases:
+        EMIT_LABEL(label_1ez);
+        BRP(opr2, label_false);
+        BRZ(R0, label_true);
+
+        // opr1 < 0 cases:
+        EMIT_LABEL(label_1ltz);
+        BRP(opr2, label_false);
+        BRZ(opr2, label_false);
+        SUB(TMP_1_REG, opr1, opr2);
+        BRZ(TMP_1_REG, label_true);
+        BRP(TMP_1_REG, label_true);
+
+        free((char *)label_1gtz);
+        free((char *)label_1ez);
+        free((char *)label_1ltz);
+        free((char *)label_1gtz_2gtz);
+      }
+      break;
+
+    case COND_LT | COND_UNSIGNED:
+      error("JMP Unsigned LT is not supported");
+      break;
+    case COND_GT | COND_UNSIGNED:
+      error("JMP Unsigned GT is not supported");
+      break;
+    case COND_LE | COND_UNSIGNED:
+      error("JMP Unsigned LE is not supported");
+      break;
+    case COND_GE | COND_UNSIGNED:
+      error("JMP Unsigned GE is not supported");
+      break;
+
+    default:
+      assert(false);
+      break;
+  }
+
+  EMIT_LABEL(label_false);
+
+  free((char *)label_false);
 }
 
 static void ei_tjmp(IR *ir) {
@@ -234,7 +363,7 @@ static void ei_precall(IR *ir) {
 static void ei_pusharg(IR *ir) {
   int pow = ir->opr1->vsize;
   assert(0 <= pow && pow < 1);
-  const char *dst = kReg16s[ir->pusharg.index + ARG_REG_START_INDEX];
+  const char *dst = kReg16s[ir->pusharg.index + ArchRegParamMapping[0]];
   if (ir->opr1->flag & VRF_CONST) {
     load_val(dst, ir->opr1->fixnum);
   }
@@ -246,11 +375,19 @@ static void ei_pusharg(IR *ir) {
 static void ei_call(IR *ir) {
   if (ir->call.label != NULL) {
     char *label = format_func_name(ir->call.label, ir->call.global);
-    label = fmt("$%s", label);
     JSR(RET_ADDRESS_REG, label);
   } else {
     assert(!(ir->opr1->flag & VRF_CONST));
     error("Jumping to register address is not supported");
+  }
+
+  // TODO: Is the SP add from other targets required here?
+
+  // Restore caller save registers.
+  pop_caller_save_regs(ir->call.precall->precall.caller_saves);
+
+  if (ir->dst != NULL && ir->dst->phys != INT_RET_REG_INDEX) {
+    MOV(kReg16s[ir->dst->phys], kReg16s[INT_RET_REG_INDEX]);
   }
 }
 
@@ -312,9 +449,9 @@ int push_callee_save_regs(unsigned long used, unsigned long fused) {
     if (used & (1UL << ireg)) {
       const char *reg = kReg16s[ireg];
       if (count == 0) {
-        START_PUSH(reg, TMP_REG);
+        START_PUSH(reg, TMP_1_REG);
       } else {
-        CONTINUE_PUSH(reg, TMP_REG);
+        CONTINUE_PUSH(reg, TMP_1_REG);
       }
       ++count;
     }
@@ -330,10 +467,10 @@ void pop_callee_save_regs(unsigned long used, unsigned long fused) {
     if (used & (1UL << ireg)) {
       const char *reg = kReg16s[ireg];
       if (no_moves) {
-        START_POP(reg, TMP_REG);
+        START_POP(reg, TMP_1_REG);
         no_moves = false;
       } else {
-        CONTINUE_POP(reg, TMP_REG);
+        CONTINUE_POP(reg, TMP_1_REG);
       }
     }
   }
@@ -355,15 +492,31 @@ static Vector *push_caller_save_regs(unsigned long living) {
     if (living & (1UL << ireg)) {
       const char *reg = kReg16s[ireg];
       if (saves->len == 0) {
-        START_PUSH(reg, TMP_REG);
+        START_PUSH(reg, TMP_1_REG);
       } else {
-        CONTINUE_PUSH(reg, TMP_REG);
+        CONTINUE_PUSH(reg, TMP_1_REG);
       }
       vec_push(saves, reg);
     }
   }
 
   return saves;
+}
+
+static void pop_caller_save_regs(Vector *saves) {
+  bool no_moves = true;
+  if (saves->len <= 0) {
+    return;
+  }
+  for (int n = saves->len, i = n; i-- > 0; ) {
+    const char *reg = saves->data[i];
+    if (no_moves) {
+      START_PUSH(reg, TMP_1_REG);
+      no_moves = false;
+    } else {
+      CONTINUE_PUSH(reg, TMP_1_REG);
+    }
+  }
 }
 
 void emit_bb_irs(BBContainer *bbcon) {

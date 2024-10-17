@@ -50,10 +50,10 @@ static void move_params_to_assigned(Function *func) {
     const char *src = kReg16s[ArchRegParamMapping[p->index]];
     if (vreg->flag & VRF_SPILLED) {
       if (no_noves) {
-        START_PUSH(src, TMP_REG);
+        START_PUSH(src, TMP_1_REG);
         no_noves = false;
       } else {
-        CONTINUE_PUSH(src, TMP_REG);
+        CONTINUE_PUSH(src, TMP_1_REG);
       }
     } else if (ArchRegParamMapping[p->index] != vreg->phys) {
       const char *dst = kReg16s[vreg->phys];
@@ -68,7 +68,7 @@ void emit_defun(Function *func) {
     return;
 
   if (no_emits) {
-    BRZ(R0, "$main");
+    BRZ(R0, "main");
     no_emits = false;
   }
 
@@ -126,14 +126,14 @@ void emit_defun(Function *func) {
     ra_saved = !is_main && (func->flag & FUNCF_HAS_FUNCALL) != 0;
 
     if (ra_saved) {
-      START_PUSH(RET_ADDRESS_REG, TMP_REG);
+      START_PUSH(RET_ADDRESS_REG, TMP_1_REG);
     }
 
     if (fp_saved) {
       if (ra_saved) {
-        CONTINUE_PUSH(FRAME_PTR_REG, TMP_REG);
+        CONTINUE_PUSH(FRAME_PTR_REG, TMP_1_REG);
       } else {
-        START_PUSH(FRAME_PTR_REG, TMP_REG);
+        START_PUSH(FRAME_PTR_REG, TMP_1_REG);
       }
 
       // FP is saved, so omit from callee save.
@@ -162,14 +162,14 @@ void emit_defun(Function *func) {
       pop_callee_save_regs(used_reg_bits, fnbe->ra->used_freg_bits);
 
       if (fp_saved) {
-        START_POP(FRAME_PTR_REG, TMP_REG);
+        START_POP(FRAME_PTR_REG, TMP_1_REG);
       }
 
       if (ra_saved) {
         if (fp_saved) {
-          CONTINUE_POP(RET_ADDRESS_REG, TMP_REG);
+          CONTINUE_POP(RET_ADDRESS_REG, TMP_1_REG);
         } else {
-          START_POP(RET_ADDRESS_REG, TMP_REG);
+          START_POP(RET_ADDRESS_REG, TMP_1_REG);
         }
       }
     }

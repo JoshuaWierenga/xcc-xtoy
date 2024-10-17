@@ -4,7 +4,7 @@
 
 // Configuration for xtoy
 
-#define MAX_REG_ARGS  (6)
+#define MAX_REG_ARGS  (5)
 #define MAX_FREG_ARGS (0)
 
 #define PHYSICAL_REG_TEMPORARY   (8)
