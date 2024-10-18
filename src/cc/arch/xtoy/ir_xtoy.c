@@ -141,7 +141,7 @@ static void ei_add(IR *ir) {
   if (ir->opr2->flag & VRF_CONST) {
     int val = ir->opr2->fixnum;
     if (0 == val) {
-      // Do nothing
+      MOV(dst, src1);
     } else {
       load_val(TMP_1_REG, val);
       ADD(dst, src1, TMP_1_REG);
@@ -160,7 +160,7 @@ static void ei_sub(IR *ir) {
   if (ir->opr2->flag & VRF_CONST) {
     int val = ir->opr2->fixnum;
     if (0 == val) {
-      // Do nothing
+      MOV(dst, src1);
     } else {
       load_val(TMP_1_REG, val);
       SUB(dst, src1, TMP_1_REG);
@@ -229,8 +229,23 @@ static void ei_bitxor(IR *ir) {
 }
 
 static void ei_lshift(IR *ir) {
-  UNUSED(ir);
-  error(fmt("function %s is not supported", __func__));
+  assert(!(ir->opr1->flag & VRF_CONST));
+  int pow = ir->dst->vsize;
+  assert(0 <= pow && pow < 1);
+  const char *dst = kReg16s[ir->dst->phys];
+  const char *src1 = kReg16s[ir->opr1->phys];
+  if (ir->opr2->flag & VRF_CONST) {
+    int val = ir->opr2->fixnum;
+    assert(0 <= val && 0xF >= val);
+    if (0 == val) {
+      MOV(dst, src1);
+    } else {
+      load_val(TMP_1_REG, val);
+      ASL(dst, src1, TMP_1_REG);
+    }
+  } else {
+    ASL(dst, src1, kReg16s[ir->opr2->phys]);
+  }
 }
 
 static void ei_rshift(IR *ir) {
