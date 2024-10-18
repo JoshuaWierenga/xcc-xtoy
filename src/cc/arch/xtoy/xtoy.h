@@ -30,6 +30,7 @@
 
 #define ADD(r1, r2, r3) EMIT_ASM("add", r1, r2, r3) // r1 = r2 + r3
 #define SUB(r1, r2, r3) EMIT_ASM("sub", r1, r2, r3) // r1 = r2 - r3
+#define AND(r1, r2, r3) EMIT_ASM("and", r1, r2, r3) // r1 = r2 & r3
 #define ASL(r1, r2, r3) EMIT_ASM("asl", r1, r2, r3) // r1 = r2 << r3
 #define LDA(r, a)       EMIT_ASM("lda", r, a)       // r = a
 #define LOD(r, a)       EMIT_ASM("lod", r, a)       // r = mem[a]

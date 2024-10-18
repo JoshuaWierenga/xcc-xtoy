@@ -136,10 +136,8 @@ static void ei_add(IR *ir) {
   assert(!(ir->opr1->flag & VRF_CONST));
   int pow = ir->dst->vsize;
   assert(0 <= pow && pow < 1);
-  int dstphys = ir->dst->phys;
-  int src1phys = ir->opr1->phys;
-  const char *dst = kReg16s[dstphys];
-  const char *src1 = kReg16s[src1phys];
+  const char *dst = kReg16s[ir->dst->phys];
+  const char *src1 = kReg16s[ir->opr1->phys];
   if (ir->opr2->flag & VRF_CONST) {
     int val = ir->opr2->fixnum;
     if (0 == val) {
@@ -157,10 +155,8 @@ static void ei_sub(IR *ir) {
   assert(!(ir->opr1->flag & VRF_CONST));
   int pow = ir->dst->vsize;
   assert(0 <= pow && pow < 1);
-  int dstphys = ir->dst->phys;
-  int src1phys = ir->opr1->phys;
-  const char *dst = kReg16s[dstphys];
-  const char *src1 = kReg16s[src1phys];
+  const char *dst = kReg16s[ir->dst->phys];
+  const char *src1 = kReg16s[ir->opr1->phys];
   if (ir->opr2->flag & VRF_CONST) {
     int val = ir->opr2->fixnum;
     if (0 == val) {
@@ -190,8 +186,22 @@ static void ei_mod(IR *ir) {
 }
 
 static void ei_bitand(IR *ir) {
-  UNUSED(ir);
-  error(fmt("function %s is not supported", __func__));
+  assert(!(ir->opr1->flag & VRF_CONST));
+  int pow = ir->dst->vsize;
+  assert(0 <= pow && pow < 1);
+  const char *dst = kReg16s[ir->dst->phys];
+  const char *src1 = kReg16s[ir->opr1->phys];
+  if (ir->opr2->flag & VRF_CONST) {
+    int val = ir->opr2->fixnum;
+    if (0 == val) {
+      MOV(dst, R0);
+    } else {
+      load_val(TMP_1_REG, val);
+      AND(dst, src1, TMP_1_REG);
+    }
+  } else {
+    AND(dst, src1, kReg16s[ir->opr2->phys]);
+  }
 }
 
 static void ei_bitor(IR *ir) {

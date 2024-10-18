@@ -5,6 +5,8 @@ make ARCHTYPE=xtoy PLATFORM=xtoy cc1 cpp xcc
 Run xcc:
 ```sh
 ./xcc -S examples/minimal.c -o test.xasm
+or
+./xcc -S examples/tinyfib.c -o test.xasm
 ```
 
 https://github.com/JoshuaWierenga/xasm
