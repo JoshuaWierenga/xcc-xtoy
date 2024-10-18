@@ -210,8 +210,22 @@ static void ei_bitor(IR *ir) {
 }
 
 static void ei_bitxor(IR *ir) {
-  UNUSED(ir);
-  error(fmt("function %s is not supported", __func__));
+  assert(!(ir->opr1->flag & VRF_CONST));
+  int pow = ir->dst->vsize;
+  assert(0 <= pow && pow < 1);
+  const char *dst = kReg16s[ir->dst->phys];
+  const char *src1 = kReg16s[ir->opr1->phys];
+  if (ir->opr2->flag & VRF_CONST) {
+    int val = ir->opr2->fixnum;
+    if (0 == val) {
+      MOV(dst, src1);
+    } else {
+      load_val(TMP_1_REG, val);
+      XOR(dst, src1, TMP_1_REG);
+    }
+  } else {
+    XOR(dst, src1, kReg16s[ir->opr2->phys]);
+  }
 }
 
 static void ei_lshift(IR *ir) {
