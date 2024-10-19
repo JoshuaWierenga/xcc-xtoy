@@ -205,8 +205,29 @@ static void ei_bitand(IR *ir) {
 }
 
 static void ei_bitor(IR *ir) {
-  UNUSED(ir);
-  error(fmt("function %s is not supported", __func__));
+  assert(!(ir->opr1->flag & VRF_CONST));
+  int pow = ir->dst->vsize;
+  assert(0 <= pow && pow < 1);
+  const char *dst = kReg16s[ir->dst->phys];
+  const char *src1 = kReg16s[ir->opr1->phys];
+  // Visual X-Toy does not support bitwise or
+  // However A or B = (A xor B) xor (A and B)
+  if (ir->opr2->flag & VRF_CONST) {
+    int val = ir->opr2->fixnum;
+    if (0 == val) {
+      MOV(dst, src1);
+    } else {
+      load_val(TMP_2_REG, val);
+      XOR(TMP_1_REG, src1, TMP_2_REG);
+      AND(dst, src1, TMP_2_REG);
+      XOR(dst, TMP_1_REG, dst);
+    }
+  } else {
+    const char *src2 = kReg16s[ir->opr2->phys];
+    XOR(TMP_1_REG, src1, src2);
+    AND(dst, src1, src2);
+    XOR(dst, TMP_1_REG, dst);
+  }
 }
 
 static void ei_bitxor(IR *ir) {
