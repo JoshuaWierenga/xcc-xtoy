@@ -2,7 +2,7 @@
 #include "./arch_config.h"
 
 #include <assert.h>   // assert
-#include <inttypes.h> // PRIu16, PRIX16
+#include <inttypes.h> // PRIu16, PRIX16, INT16_MAX, UINT16_MAX
 #include <stdbool.h>
 #include <stdlib.h>   // free
 
@@ -62,7 +62,9 @@ const RegAllocSettings kArchRegAllocSettings = {
 
 static uint16_t labelCount = 0;
 
-static void load_val(const char *dst, int16_t val) {
+static void load_val(const char *dst, int32_t val) {
+  // Visual X-Toy only supports signed integers
+  assert(val <= INT16_MAX);
   if ((uint16_t)val <= UINT8_MAX) {
       LDA(dst, im((uint8_t)val));
   } else {
@@ -280,8 +282,22 @@ static void ei_neg(IR *ir) {
 }
 
 static void ei_bitnot(IR *ir) {
-  UNUSED(ir);
-  error(fmt("function %s is not supported", __func__));
+  int pow = ir->dst->vsize;
+  assert(0 <= pow && pow < 1);
+  const char *dst = kReg16s[ir->dst->phys];
+  if (ir->opr1->flag & VRF_CONST) {
+    int val = ir->opr1->fixnum;
+    load_val(dst, (int16_t)UINT16_MAX);
+    if (0 == val) {
+      // Do nothing
+    } else {
+      load_val(TMP_1_REG, val);
+      XOR(dst, TMP_1_REG, dst);
+    }
+  } else {
+    load_val(TMP_1_REG, (int16_t)UINT16_MAX);
+    XOR(dst, kReg16s[ir->opr1->phys], TMP_1_REG);
+  }
 }
 
 static void ei_cond(IR *ir) {

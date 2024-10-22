@@ -1,0 +1,174 @@
+Going to YY if true and ZZ if false
+
+Single Cases:
+
+X > 0:
+DXYY
+C0ZZ (X <= 0)
+
+X = 0:
+CXYY
+C0ZZ (X != 0)
+
+X < 0:
+DXZZ
+CXZZ (X <= 0)
+C0YY (X < 0)
+
+X <= 0:
+DXZZ
+C0YY (X <= 0)
+
+X != 0:
+CXZZ
+C0YY (X != 0)
+
+X >= 0:
+DXYY
+CXYY (X <= 0)
+C0ZZ (X < 0)
+
+
+M >= N Cases:
+
+M > 0 and N > 0(varies):
+DM-LABEL1
+C0-ANOTHERCASE (M <= 0)
+LABEL1:
+DM-LABEL2      (M > 0)
+C0YY           (M > 0 && N <= 0)
+LABEL2:
+7T01	       (M > 0 && N > 0),
+2TTN	       (M > 0 && N > 0), T = 1
+1TTM	       (M > 0 && N > 0), T = 1 - N
+DTYY           (M > 0 && N > 0), T = 1 - N + M
+C0ZZ           (M < N)
+
+M > 0 and N = 0(true):
+DM-LABEL
+C0-ANOTHERCASE (M <= 0)
+LABEL:
+DNYY           (M > 0)
+C0-ANOTHERCASE (M > 0 && N != 0)
+
+M > 0 and N < 0(true):
+DM-LABEL
+C0-ANOTHERCASE (M <= 0)
+LABEL:
+DN-ANOTHERCASE (M > 0)
+CN-ANOTHERCASE (M > 0 && N <= 0)
+C0YY           (M > 0 && N < 0)
+
+M = 0 and N > 0(false):
+CM-LABEL
+C0-ANOTHERCASE (M != 0)
+LABEL:
+DNZZ           (M = 0)
+C0-ANOTHERCASE (M = 0 && N <= 0)
+
+M = 0 and N = 0(true):
+CM-LABEL
+C0-ANOTHERCASE (M != 0)
+LABEL:
+CNYY           (M = 0)
+C0-ANOTHERCASE (M = 0 && M != 0)
+
+M = 0 and N < 0(true):
+CM-LABEL
+C0-ANOTHERCASE (M != 0)
+LABEL:
+DN-ANOTHERCASE (M = 0)
+CN-ANOTHERCASE (M = 0 && N <= 0)
+C0YY           (M = 0 && N < 0)
+
+M < 0 and N > 0(false):
+CM-ANOTHERCASE
+DM-ANOTHERCASE (M != 0)
+DNZZ           (M < 0)
+C0-ANOTHERCASE (M < 0 && N <= 0)
+
+M < 0 and N = 0(false):
+CM-ANOTHERCASE
+DM-ANOTHERCASE (M != 0)
+CNZZ           (M < 0)
+C0-ANOTHERCASE (M < 0 && N != 0)
+
+M < 0 and N < 0(varies):
+CM-ANOTHERCASE
+DM-ANOTHERCASE (M != 0)
+DNZZ           (M < 0)
+CNZZ           (M < 0 && N <= 0)
+2TMN           (M < 0 && N < 0)
+DTYY           (M < 0 && N < 0), T = M - N
+CTYY           (M <= N)
+C0ZZ           (M < N)
+
+
+M >= N Cases merged by M case:
+
+M > 0 and N <= 0(true), M > 0 and N > 0(varies):
+DM-LABEL1
+C0-M<=0CASE (M <= 0)
+LABEL1:
+DN-LABEL2   (M > 0)
+C0YY        (M > 0 && N <= 0)
+LABEL2:
+7T01	    (M > 0 && N > 0),
+2TTN	    (M > 0 && N > 0), T = 1
+1TTM	    (M > 0 && N > 0), T = 1 - N
+DTYY        (M > 0 && N > 0), T = 1 - N + M
+C0ZZ        (M < N)
+
+M = 0 and N > 0(false), M = 0 and N <= 0(true):
+CM-LABEL
+C0-M!=0CASE (M != 0)
+LABEL:
+DNZZ        (M = 0)
+C0YY        (M = 0 && N <= 0)
+
+M < 0 and N > 0(false), M < 0 and N = 0(false), M < 0 and N < 0(varies):
+CM-M=0CASE
+DM-M>0CASE (M != 0)
+DNZZ       (M < 0)
+CNZZ       (M < 0 && N <= 0)
+2TMN       (M < 0 && N < 0)
+CTYY       (M < 0 && N < 0), T = M - N
+DTYY       (M <= N)
+C0ZZ       (M < N)
+
+
+M >= N Cases merged to a single set of instructions(still seperated for readability):
+
+Intro, 3 instructions:
+DM-M>0CASE
+CM-M=0CASE  (M <= 0)
+C0-M<0CASE  (M < 0)
+
+Already know M > 0
+M > 0 and N <= 0(true), M > 0 and N > 0(varies), 7 instructions(Can the T check be reduced by one or two instructions?):
+M>0CASE:
+DN-M>0N>0CASE (M > 0)
+C0YY          (M > 0 && N <= 0)
+M>0N>0CASE:
+7T01	      (M > 0 && N > 0),
+2TTN	      (M > 0 && N > 0), T = 1
+1TTM	      (M > 0 && N > 0), T = 1 - N
+DTYY          (M > 0 && N > 0), T = 1 - N + M
+C0ZZ          (M < N)
+
+Already know M = 0
+M = 0 and N > 0(false), M = 0 and N <= 0(true), 2 instructions:
+M=0CASE:
+DNZZ        (M = 0)
+C0YY        (M = 0 && N <= 0)
+
+
+Already know M < 0
+M < 0 and N > 0(false), M < 0 and N = 0(false), M < 0 and N < 0(varies), 6 instructions:
+M<0CASE:
+DNZZ (M < 0)
+CNZZ (M < 0 && N <= 0)
+2TMN (M < 0 && N < 0)
+CTYY (M < 0 && N < 0), T = M - N
+DTYY (M <= N)
+C0ZZ (M < N)

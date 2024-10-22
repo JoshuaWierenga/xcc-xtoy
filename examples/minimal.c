@@ -1,25 +1,25 @@
 #include <stdint.h>
 
-int test_or(int a, int b) {
-  return a | b;
+int test_not(int a) {
+  return ~a;
 }
 
-int test_or_redundant(int a) {
-  return a | 0;
+int test_not_redundant(void) {
+  return ~0xFFFF;
 }
 
-int test_or_halfword(int a) {
-  return a | 1;
+int test_not_halfword(void) {
+  return ~1;
 }
 
-int test_or_word(int a) {
-  return a | 256;
+int test_not_word(void) {
+  return ~256;
 }
 
 int main(void) {
-  test_or(1, 2);
-  test_or_redundant(1);
-  test_or_halfword(1);
+  test_not(1);
+  test_not_redundant();
+  test_not_halfword();
 
-  return test_or_word(1);
+  return test_not_word();
 }

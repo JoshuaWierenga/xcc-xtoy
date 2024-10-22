@@ -8,6 +8,7 @@
 #include <string.h>  // strcmp
 #include <sys/stat.h>
 
+#include "../config.h"
 #include "../version.h"
 #include "table.h"
 
@@ -332,6 +333,10 @@ const char *block_comment_end(const char *p) {
 }
 
 int64_t wrap_value(int64_t value, int size, bool is_unsigned) {
+  // This function expected `size` to the number of 8 bit blocks
+  // but it is actually the number of byte sized blocks on the target
+  size = size * TARGET_CHAR_BIT / 8;
+
   if (is_unsigned) {
     switch (size) {
     case 1:  value = (uint8_t)value; break;
