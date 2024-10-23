@@ -1,5 +1,9 @@
 #include <stdint.h>
 
+void output_int(int val) {
+  __asm("str r1, FF");
+}
+
 int test_not(int a) {
   return ~a;
 }
@@ -17,9 +21,9 @@ int test_not_word(void) {
 }
 
 int main(void) {
-  test_not(1);
-  test_not_redundant();
-  test_not_halfword();
+  output_int(test_not(1));
+  output_int(test_not_redundant());
+  output_int(test_not_halfword());
 
   return test_not_word();
 }

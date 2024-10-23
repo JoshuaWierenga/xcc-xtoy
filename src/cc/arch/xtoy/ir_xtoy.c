@@ -97,6 +97,8 @@ static void load_val(const char *dst, int32_t val) {
 
 //
 
+// TODO: Skip all moves where dst and src as the same
+
 static void ei_bofs(IR *ir) {
   UNUSED(ir);
   error(fmt("function %s is not supported", __func__));
@@ -490,8 +492,15 @@ static void ei_cast(IR *ir) {
 }
 
 static void ei_mov(IR *ir) {
-  UNUSED(ir);
-  error(fmt("function %s is not supported", __func__));
+  assert(!(ir->dst->flag & VRF_CONST));
+  int pow = ir->dst->vsize;
+  assert(0 <= pow && pow < 1);
+  const char *dst = kReg16s[ir->dst->phys];
+  if (ir->opr1->flag & VRF_CONST) {
+    load_val(dst, ir->opr1->fixnum);
+  } else if (ir->opr1->phys != ir->dst->phys) {
+    MOV(dst, kReg16s[ir->opr1->phys]);
+  }
 }
 
 static void ei_keep(IR *ir) {
@@ -500,8 +509,15 @@ static void ei_keep(IR *ir) {
 }
 
 static void ei_asm(IR *ir) {
-  UNUSED(ir);
-  error(fmt("function %s is not supported", __func__));
+  EMIT_ASM(ir->asm_.str);
+  if (ir->dst != NULL) {
+    assert(!(ir->dst->flag & VRF_CONST));
+    int pow = ir->dst->vsize;
+    assert(0 <= pow && pow < 1);
+    if (INT_RET_REG_INDEX != ir->dst->phys) {
+      MOV(kReg16s[ir->dst->phys], kReg16s[INT_RET_REG_INDEX]);
+    }
+  }
 }
 
 //
