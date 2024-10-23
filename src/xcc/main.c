@@ -24,15 +24,15 @@ static pid_t fork1(void) {
 }
 
 static int wait_process(pid_t pid) {
-  int ec = -1;
-  if (waitpid(pid, &ec, 0) < 0)
+  int status = -1;
+  if (waitpid(pid, &status, 0) < 0)
     error("wait failed");
-  return ec;
+  return status;
 }
 
-static pid_t wait_child(int *result) {
-  *result = -1;
-  return waitpid(0, result, 0);
+static pid_t wait_child(int *status) {
+  *status = -1;
+  return waitpid(0, status, 0);
 }
 
 // command > ofd
@@ -107,14 +107,14 @@ static int compile(const char *src, Vector *cpp_cmd, Vector *cc1_cmd, int ofd) {
 
   int res = 0;
   for (; running > 0; --running) {
-    int r = 0;
-    pid_t done = wait_child(&r);  // cpp or cc1
+    int status;
+    pid_t done = wait_child(&status);  // cpp or cc1
     if (done > 0) {
-      res |= r;
+      res |= status;
       if (done == cpp_pid) {
         cpp_pid = -1;
         if (cc_pid != -1) {
-          if (r != 0) {
+          if (status != 0) {
             // Illegal: cpp exit with failure.
             kill(cc_pid, SIGKILL);
             break;
@@ -228,13 +228,13 @@ static int compile_asm(const char *source_fn, enum OutType out_type, const char 
     as_cmd->data[as_cmd->len - 2] = (void*)source_fn;  // Overwrite source filename.
   }
 
-  int res = 0;
+  int status = 0;
   pid_t as_pid = exec_with_ofd((char**)as_cmd->data, ofd);
-  waitpid(as_pid, &res, 0);
+  waitpid(as_pid, &status, 0);
 
   if (out_type >= OutExecutable)
     vec_push(ld_cmd, objfn);
-  return res;
+  return status;
 }
 
 static const char *get_exe_prefix(const char *path) {
@@ -308,6 +308,7 @@ static void parse_options(int argc, char *argv[], Options *opts) {
     {"isystem", required_argument, OPT_ISYSTEM},  // Add system include path
     {"idirafter", required_argument, OPT_IDIRAFTER},  // Add include path (after)
     {"D", required_argument},  // Define macro
+    {"C", no_argument},  // Do not discard comments
     {"o", required_argument},  // Specify output filename
     {"x", required_argument},  // Specify code type
     {"l", required_argument},  // Library
@@ -373,6 +374,9 @@ static void parse_options(int argc, char *argv[], Options *opts) {
     case 'D':
       vec_push(opts->cpp_cmd, "-D");
       vec_push(opts->cpp_cmd, optarg);
+      break;
+    case 'C':
+      vec_push(opts->cpp_cmd, "-C");
       break;
     case 'o':
       opts->ofn = optarg;
@@ -573,7 +577,9 @@ static int do_compile(Options *opts, const char *root) {
 
     vec_push(opts->ld_cmd, NULL);
     pid_t ld_pid = exec_with_ofd((char**)opts->ld_cmd->data, -1);
-    waitpid(ld_pid, &res, 0);
+    int status;
+    waitpid(ld_pid, &status, 0);
+    res |= status;
   }
 
   return res == 0 ? 0 : 1;
