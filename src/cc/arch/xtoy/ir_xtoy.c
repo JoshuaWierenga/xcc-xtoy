@@ -98,6 +98,7 @@ static void load_val(const char *dst, int32_t val) {
 //
 
 // TODO: Skip all moves where dst and src as the same
+// TODO: Optimise LDA(rM, label)(ei_iofs), STI(rN, rM)(ei_store) to STR(rN, label)
 
 static void ei_bofs(IR *ir) {
   UNUSED(ir);
@@ -105,8 +106,13 @@ static void ei_bofs(IR *ir) {
 }
 
 static void ei_iofs(IR *ir) {
-  UNUSED(ir);
-  error(fmt("function %s is not supported", __func__));
+  assert(ir->iofs.offset == 0);
+  char *label = fmt_name(ir->iofs.label);
+  if (ir->iofs.global) {
+    label = MANGLE(label);
+  }
+  label = quote_label(label);
+  LDA(kReg16s[ir->dst->phys], label);
 }
 
 static void ei_sofs(IR *ir) {
@@ -115,8 +121,11 @@ static void ei_sofs(IR *ir) {
 }
 
 static void ei_load(IR *ir) {
-  UNUSED(ir);
-  error(fmt("function %s is not supported", __func__));
+  assert(!(ir->opr1->flag & VRF_CONST));
+  assert(!(ir->opr1->flag & VRF_SPILLED));
+  int pow = ir->dst->vsize;
+  assert(0 <= pow && pow < 1);
+  LDI(kReg16s[ir->dst->phys], kReg16s[ir->opr1->phys]);
 }
 
 // TODO: Merge with ei_load?
@@ -126,8 +135,18 @@ static void ei_load_s(IR *ir) {
 }
 
 static void ei_store(IR *ir) {
-  UNUSED(ir);
-  error(fmt("function %s is not supported", __func__));
+  assert(!(ir->opr2->flag & VRF_CONST));
+  assert(!(ir->opr2->flag & VRF_SPILLED));
+  int pow = ir->opr1->vsize;
+  assert(0 <= pow && pow < 1);
+  const char *src;
+  if (ir->opr1->flag & VRF_CONST) {
+    load_val(TMP_1_REG, ir->opr1->fixnum);
+    src = TMP_1_REG;
+  } else {
+    src = kReg16s[ir->opr1->phys];
+  }
+  STI(src, kReg16s[ir->opr2->phys]);;
 }
 
 // TODO: Merge with ei_store?
