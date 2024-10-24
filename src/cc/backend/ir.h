@@ -20,9 +20,11 @@ typedef struct FrameInfo {
 
 enum VRegSize {
   VRegSize1,
+#if XCC_TARGET_PLATFORM != XCC_PLATFORM_XTOY
   VRegSize2,
   VRegSize4,
   VRegSize8,
+#endif
 };
 
 #define VRF_PARAM     (1 << 0)  // Function parameter

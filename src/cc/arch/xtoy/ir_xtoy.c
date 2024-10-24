@@ -2,7 +2,7 @@
 #include "./arch_config.h"
 
 #include <assert.h>   // assert
-#include <inttypes.h> // PRIu16, PRIX16, INT16_MAX, UINT16_MAX
+#include <inttypes.h> // PRIu16, PRIX16, INT16_MIN, INT16_MAX, UINT16_MAX
 #include <stdbool.h>
 #include <stdlib.h>   // free
 
@@ -64,7 +64,7 @@ static uint16_t labelCount = 0;
 
 static void load_val(const char *dst, int32_t val) {
   // Visual X-Toy only supports signed integers
-  assert(val <= INT16_MAX);
+  assert(INT16_MIN <= val && val <= INT16_MAX);
   if ((uint16_t)val <= UINT8_MAX) {
       LDA(dst, im((uint8_t)val));
   } else {

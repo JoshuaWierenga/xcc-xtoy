@@ -8,8 +8,13 @@
 #include "table.h"
 #include "util.h"
 
+#if XCC_TARGET_PLATFORM == XCC_PLATFORM_XTOY
+static enum VRegSize vtVoidPtr = VRegSize1;
+static enum VRegSize vtBool    = VRegSize1;
+#else
 static enum VRegSize vtVoidPtr = VRegSize8;
 static enum VRegSize vtBool    = VRegSize4;
+#endif
 
 inline enum ConditionKind swap_cond(enum ConditionKind cond);
 
