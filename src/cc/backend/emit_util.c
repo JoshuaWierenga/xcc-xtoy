@@ -241,6 +241,7 @@ static void emit_varinfo(const VarInfo *varinfo, const Initializer *init) {
   };
 
   const Name *name = varinfo->name;
+#if XCC_TARGET_PLATFORM != XCC_PLATFORM_XTOY
   if (init != NULL) {
     if (varinfo->type->qualifier & TQ_CONST)
       _RODATA();
@@ -251,18 +252,21 @@ static void emit_varinfo(const VarInfo *varinfo, const Initializer *init) {
       _BSS();
     }
   }
+#endif
 
   char *label = fmt_name(name);
   if ((varinfo->storage & VS_STATIC) == 0) {  // global
     label = quote_label(MANGLE(label));
+#if XCC_TARGET_PLATFORM != XCC_PLATFORM_XTOY
     _GLOBL(label);
+#endif
   } else {
     label = quote_label(label);
+#if XCC_TARGET_PLATFORM != XCC_PLATFORM_XTOY
     _LOCAL(label);
+#endif
   }
-#if XCC_TARGET_PLATFORM == XCC_PLATFORM_XTOY
-  error("XTOY asm does not variable type info");
-#elif XCC_TARGET_PLATFORM != XCC_PLATFORM_APPLE
+#if XCC_TARGET_PLATFORM != XCC_PLATFORM_APPLE && XCC_TARGET_PLATFORM != XCC_PLATFORM_XTOY
   EMIT_ASM(".type", quote_label(fmt_name(name)), "@object");
 #endif
 
@@ -281,7 +285,12 @@ static void emit_varinfo(const VarInfo *varinfo, const Initializer *init) {
     } else {
       EMIT_ALIGN(align_size(varinfo->type));
       EMIT_LABEL(label);
+      // TODO: Find a way to use addresses 00 through 0F for vars first
+#if XCC_TARGET_PLATFORM == XCC_PLATFORM_XTOY
+      EMIT_ASM(".WORD", "0000");
+#else
       _ZERO(num(size));
+#endif
     }
   }
 }
