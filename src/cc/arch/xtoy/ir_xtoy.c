@@ -449,7 +449,52 @@ static void ei_jmp(IR *ir) {
     break;
 
     case COND_LT:
-      error("JMP LT is not supported");
+      if (orp2_zero) {
+        BRP(opr1, label_false); // opr2 == 0
+        BRZ(opr1, label_false); // opr1 <= 0 && opr2 == 0
+        BRZ(R0,   label_true);  // opr1 <  0 && opr2 == 0 => opr1 < opr2
+      } else {
+        // Intro
+        const char *label_1gtz = xasprintf("%s%" PRIu16, "label_", labelCount);
+        ++labelCount;
+        const char *label_1ez = xasprintf("%s%" PRIu16, "label_", labelCount);
+        ++labelCount;
+
+        BRP(opr1, label_1gtz);
+        BRZ(opr1, label_1ez);            // opr1 <= 0
+        // fallthrough to opr1 < 0 cases    opr1 <  0
+
+        // opr1 < 0 cases:
+        BRP(opr2, label_true);           // opr1 <  0
+        BRZ(opr2, label_true);           // opr1 <  0 && opr2 <= 0
+        SUB(TMP_1_REG, opr1, opr2);      // opr1 <  0 && opr2 <  0
+        BRZ(TMP_1_REG, label_false);     // opr1 <  0 && opr2 <  0, T = opr1 - opr2
+        BRP(TMP_1_REG, label_false);     // opr1 <  0 && opr2 <  0 && T != 0 => opr1 != opr2
+        BRZ(R0, label_true);             // opr1 <  0 && opr2 <  0 && T <  0 => opr1 <  opr2
+
+        // opr1 > 0 cases:
+        const char *label_1gtz_2gtz = xasprintf("%s%" PRIu16, "label_", labelCount);
+        ++labelCount;
+
+        EMIT_LABEL(label_1gtz);
+        BRP(opr2, label_1gtz_2gtz);      // opr1 > 0
+        BRZ(R0, label_false);            // opr1 > 0 && opr2 <= 0 => opr1 >= opr2
+        EMIT_LABEL(label_1gtz_2gtz);
+        load_val(TMP_1_REG, 1);          // opr1 > 0 && opr2 > 0
+        SUB(TMP_1_REG, TMP_1_REG, opr2); // opr1 > 0 && opr2 > 0, T = 1
+        ADD(TMP_1_REG, TMP_1_REG, opr1); // opr1 > 0 && opr2 > 0, T = 1 - opr2
+        BRP(TMP_1_REG, label_false);     // opr1 > 0 && opr2 > 0, T = 1 - opr2 + opr1
+        BRZ(R0, label_true);             // opr1 > 0 && opr2 > 0, T <= 0 => opr1 < opr2
+
+        // opr1 == 0 cases:
+        EMIT_LABEL(label_1ez);
+        BRP(opr2, label_true) ;          // opr1 == 0
+        // fallthrough to label_false       opr1 == 0 && opr2 <= 0 => opr1 >= opr2
+
+        free((char *)label_1gtz);
+        free((char *)label_1ez);
+        free((char *)label_1gtz_2gtz);
+      }
       break;
     case COND_GT:
       error("JMP GT is not supported");
@@ -459,8 +504,9 @@ static void ei_jmp(IR *ir) {
       break;
     case COND_GE:
       if (orp2_zero) {
-        BRP(opr1, label_true);
-        BRZ(opr1, label_true);
+        BRP(opr1, label_true);        // opr2 == 0
+        BRZ(opr1, label_true);        // opr1 <= 0 && opr2 == 0
+        // fallthrough to label_false    opr1 <  0 && opr2 == 0 => opr1 < opr2
       } else {
         // Intro
         const char *label_1gtz = xasprintf("%s%" PRIu16, "label_", labelCount);
@@ -469,33 +515,35 @@ static void ei_jmp(IR *ir) {
         ++labelCount;
 
         BRP(opr1, label_1gtz);
-        BRZ(opr1, label_1ez);
+        BRZ(opr1, label_1ez);            // opr1 <= 0
+        // fallthrough to opr1 < 0 cases    opr1 <  0
 
         // opr1 < 0 cases:
-        BRP(opr2, label_false);
-        BRZ(opr2, label_false);
-        SUB(TMP_1_REG, opr1, opr2);
-        BRZ(TMP_1_REG, label_true);
-        BRP(TMP_1_REG, label_true);
-        BRZ(R0, label_false);
+        BRP(opr2, label_false);          // opr1 <  0
+        BRZ(opr2, label_false);          // opr1 <  0 && opr2 <= 0
+        SUB(TMP_1_REG, opr1, opr2);      // opr1 <  0 && opr2 <  0
+        BRZ(TMP_1_REG, label_true);      // opr1 <  0 && opr2 <  0, T = opr1 - opr2
+        BRP(TMP_1_REG, label_true);      // opr1 <  0 && opr2 <  0 && T != 0 => opr1 != opr2
+        BRZ(R0, label_false);            // opr1 <  0 && opr2 <  0 && T <  0 => opr1 <  opr2
 
         // opr1 == 0 cases:
         EMIT_LABEL(label_1ez);
-        BRP(opr2, label_false);
-        BRZ(R0, label_true);
+        BRP(opr2, label_false);          // opr1 == 0
+        BRZ(R0, label_true);             // opr1 == 0 && opr2 <= 0 => opr1 >= opr2
 
         // opr1 > 0 cases:
         const char *label_1gtz_2gtz = xasprintf("%s%" PRIu16, "label_", labelCount);
         ++labelCount;
 
         EMIT_LABEL(label_1gtz);
-        BRP(opr2, label_1gtz_2gtz);
-        BRZ(R0, label_true);
+        BRP(opr2, label_1gtz_2gtz);      // opr1 > 0
+        BRZ(R0, label_true);             // opr1 > 0 && opr2 <= 0 => opr1 >= opr2
         EMIT_LABEL(label_1gtz_2gtz);
-        load_val(TMP_1_REG, 1);
-        SUB(TMP_1_REG, TMP_1_REG, opr2);
-        ADD(TMP_1_REG, TMP_1_REG, opr1);
-        BRP(TMP_1_REG, label_true);
+        load_val(TMP_1_REG, 1);          // opr1 > 0 && opr2 > 0
+        SUB(TMP_1_REG, TMP_1_REG, opr2); // opr1 > 0 && opr2 > 0, T = 1
+        ADD(TMP_1_REG, TMP_1_REG, opr1); // opr1 > 0 && opr2 > 0, T = 1 - opr2
+        BRP(TMP_1_REG, label_true);      // opr1 > 0 && opr2 > 0, T = 1 - opr2 + opr1
+        // fallthrough to label_false       opr1 > 0 && opr2 > 0, T <= 0 => opr1 < opr2
 
         free((char *)label_1gtz);
         free((char *)label_1ez);

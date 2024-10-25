@@ -139,10 +139,25 @@ C0ZZ       (M < N)
 
 M >= N Cases merged to a single set of instructions(still seperated for readability):
 
-Intro, 3 instructions:
+Intro, 2 instructions:
 DM-M>0CASE
 CM-M=0CASE  (M <= 0)
-C0-M<0CASE  (M < 0)
+
+Already know M < 0
+M < 0 and N > 0(false), M < 0 and N = 0(false), M < 0 and N < 0(varies), 6 instructions:
+M<0CASE:
+DNZZ (M < 0)
+CNZZ (M < 0 && N <= 0)
+2TMN (M < 0 && N < 0)
+CTYY (M < 0 && N < 0), T = M - N
+DTYY (M != N)
+C0ZZ (M < N)
+
+Already know M = 0
+M = 0 and N > 0(false), M = 0 and N <= 0(true), 2 instructions:
+M=0CASE:
+DNZZ        (M = 0)
+C0YY        (M = 0 && N <= 0)
 
 Already know M > 0
 M > 0 and N <= 0(true), M > 0 and N > 0(varies), 7 instructions(Can the T check be reduced by one or two instructions?):
@@ -155,20 +170,3 @@ M>0N>0CASE:
 1TTM	      (M > 0 && N > 0), T = 1 - N
 DTYY          (M > 0 && N > 0), T = 1 - N + M
 C0ZZ          (M < N)
-
-Already know M = 0
-M = 0 and N > 0(false), M = 0 and N <= 0(true), 2 instructions:
-M=0CASE:
-DNZZ        (M = 0)
-C0YY        (M = 0 && N <= 0)
-
-
-Already know M < 0
-M < 0 and N > 0(false), M < 0 and N = 0(false), M < 0 and N < 0(varies), 6 instructions:
-M<0CASE:
-DNZZ (M < 0)
-CNZZ (M < 0 && N <= 0)
-2TMN (M < 0 && N < 0)
-CTYY (M < 0 && N < 0), T = M - N
-DTYY (M <= N)
-C0ZZ (M < N)
