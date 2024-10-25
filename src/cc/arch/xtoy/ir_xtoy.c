@@ -418,10 +418,12 @@ static void ei_jmp(IR *ir) {
   assert(!(ir->opr1->flag & VRF_CONST));
   const char *opr1 = kReg16s[ir->opr1->phys];
 
+  bool orp2_zero = false;
   const char *opr2;
   if (ir->opr2->flag & VRF_CONST) {
     if (ir->opr2->fixnum == 0) {
       opr2 = R0;
+      orp2_zero = true;
     } else {
       // TODO: Optimise by flipping LHS(X >= Y => Y <= X)
       // With opr1 as a constant we can remove most of the cases
@@ -455,7 +457,11 @@ static void ei_jmp(IR *ir) {
     case COND_LE:
       error("JMP LE is not supported");
       break;
-    case COND_GE: {
+    case COND_GE:
+      if (orp2_zero) {
+        BRP(opr1, label_true);
+        BRZ(opr1, label_true);
+      } else {
         // Intro
         const char *label_1gtz = xasprintf("%s%" PRIu16, "label_", labelCount);
         ++labelCount;
