@@ -467,12 +467,22 @@ static void ei_jmp(IR *ir) {
         ++labelCount;
         const char *label_1ez = xasprintf("%s%" PRIu16, "label_", labelCount);
         ++labelCount;
-        const char *label_1ltz = xasprintf("%s%" PRIu16, "label_", labelCount);
-        ++labelCount;
 
         BRP(opr1, label_1gtz);
         BRZ(opr1, label_1ez);
-        BRZ(R0, label_1ltz);
+
+        // opr1 < 0 cases:
+        BRP(opr2, label_false);
+        BRZ(opr2, label_false);
+        SUB(TMP_1_REG, opr1, opr2);
+        BRZ(TMP_1_REG, label_true);
+        BRP(TMP_1_REG, label_true);
+        BRZ(R0, label_false);
+
+        // opr1 == 0 cases:
+        EMIT_LABEL(label_1ez);
+        BRP(opr2, label_false);
+        BRZ(R0, label_true);
 
         // opr1 > 0 cases:
         const char *label_1gtz_2gtz = xasprintf("%s%" PRIu16, "label_", labelCount);
@@ -486,24 +496,9 @@ static void ei_jmp(IR *ir) {
         SUB(TMP_1_REG, TMP_1_REG, opr2);
         ADD(TMP_1_REG, TMP_1_REG, opr1);
         BRP(TMP_1_REG, label_true);
-        BRZ(R0, label_false);
-
-        // opr1 == 0 cases:
-        EMIT_LABEL(label_1ez);
-        BRP(opr2, label_false);
-        BRZ(R0, label_true);
-
-        // opr1 < 0 cases:
-        EMIT_LABEL(label_1ltz);
-        BRP(opr2, label_false);
-        BRZ(opr2, label_false);
-        SUB(TMP_1_REG, opr1, opr2);
-        BRZ(TMP_1_REG, label_true);
-        BRP(TMP_1_REG, label_true);
 
         free((char *)label_1gtz);
         free((char *)label_1ez);
-        free((char *)label_1ltz);
         free((char *)label_1gtz_2gtz);
       }
       break;
