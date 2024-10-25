@@ -193,9 +193,90 @@ static void ei_sub(IR *ir) {
   }
 }
 
+// Uses too many words given there are only 245 available
+/*static void ei_mul(IR *ir) {
+  // Needs six registers
+  // source 1
+  // source 2
+  // tmp 1: 0x1 for loop index and stack pointer subtraction
+  // tmp 2: loop index
+  // dst/tmp 3: if dst overlaps a source then need another temp register
+  // tmp 4: jump condition and left shift, using first callee saved register
+  const char *dst = kReg16s[ir->dst->phys];
+
+  load_val(TMP_1_REG, 1);
+  load_val(TMP_2_REG, 16);
+
+  const char *tmp3;
+  if (ir->dst->phys == ir->opr1->phys || ir->dst->phys == ir->opr2->phys) {
+    // TMP_1_REG needs 1 anyway so loaded it above to skip START_PUSH and some extra logic
+    tmp3 = RET_ADDRESS_REG;
+    CONTINUE_PUSH(tmp3, TMP_1_REG);
+  } else {
+    tmp3 = dst;
+  }
+  MOV(tmp3, R0);
+
+  const char *tmp4 = kReg16s[kCalleeSaveRegs[0]];
+  CONTINUE_PUSH(tmp4, TMP_1_REG);
+
+  const char *label_loop = fmt("%s%" PRIu16, "label_", labelCount);
+  ++labelCount;
+  const char *label_not_set = fmt("%s%" PRIu16, "label_", labelCount);
+  ++labelCount;
+
+  EMIT_LABEL(label_loop);
+  SUB(TMP_2_REG, TMP_2_REG, TMP_1_REG);
+  ASR(tmp4, kReg16s[ir->opr2->phys], TMP_2_REG);
+  AND(tmp4, tmp4, TMP_1_REG);
+  BRZ(tmp4, label_not_set);
+  ASL(tmp4, kReg16s[ir->opr1->phys], TMP_2_REG);
+  ADD(tmp3, tmp3, tmp4);
+  EMIT_LABEL(label_not_set);
+  BRP(TMP_2_REG, label_loop);
+
+  CONTINUE_POP(tmp4, TMP_1_REG);
+  if (ir->dst->phys == ir->opr1->phys || ir->dst->phys == ir->opr2->phys) {
+    MOV(dst, tmp3);
+    CONTINUE_POP(tmp3, TMP_1_REG);
+  }
+}*/
+
+// Only works for opr1 and opr2 are in [0, INT16_MAX]
+// TODO: Support const opr2
 static void ei_mul(IR *ir) {
-  UNUSED(ir);
-  error(fmt("function %s is not supported", __func__));
+  assert(!(ir->opr1->flag & VRF_CONST));
+  assert(!(ir->opr2->flag & VRF_CONST));
+  int pow = ir->dst->vsize;
+  assert(0 <= pow && pow < 1);
+  const char *src1 = kReg16s[ir->opr1->phys];
+  const char *dst = kReg16s[ir->dst->phys];
+
+  const char *tmpdst;
+  if (ir->dst->phys == ir->opr1->phys || ir->dst->phys == ir->opr2->phys) {
+    tmpdst = TMP_1_REG;
+  } else {
+    tmpdst = dst;
+  }
+  MOV(tmpdst, R0);
+
+  load_val(TMP_2_REG, 1);
+
+  const char *label_loop = fmt("%s%" PRIu16, "label_", labelCount);
+  ++labelCount;
+  const char *label_loop_end = fmt("%s%" PRIu16, "label_", labelCount);
+  ++labelCount;
+
+  EMIT_LABEL(label_loop);
+  BRZ(src1, label_loop_end);
+  ADD(tmpdst, tmpdst, kReg16s[ir->opr2->phys]);
+  SUB(src1, src1, TMP_2_REG);
+  BRZ(R0, label_loop);
+  EMIT_LABEL(label_loop_end);
+
+  if (ir->dst->phys == ir->opr1->phys || ir->dst->phys == ir->opr2->phys) {
+    MOV(dst, tmpdst);
+  }
 }
 
 static void ei_div(IR *ir) {
