@@ -811,6 +811,14 @@ void emit_bb_irs(BBContainer *bbcon) {
   }
 }
 
+//
+
+static void swap_opr12(IR *ir) {
+  VReg *tmp = ir->opr1;
+  ir->opr1 = ir->opr2;
+  ir->opr2 = tmp;
+}
+
 static void insert_const_mov(VReg **pvreg, RegAlloc *ra, Vector *irs, int i) {
   VReg *c = *pvreg;
   VReg *tmp = reg_alloc_spawn(ra, c->vsize, c->flag & VRF_MASK);
@@ -829,12 +837,17 @@ void tweak_irs(FuncBackend *fnbe) {
     for (int j = 0; j < irs->len; ++j) {
       IR *ir = irs->data[j];
       switch (ir->kind) {
+        case IR_ADD:
+          assert(!(ir->opr1->flag & VRF_CONST) || !(ir->opr2->flag & VRF_CONST));
+          if (ir->opr1->flag & VRF_CONST) {
+            swap_opr12(ir);
+          }
+          break;
         case IR_MUL:
           assert(!(ir->opr1->flag & VRF_CONST) || !(ir->opr2->flag & VRF_CONST));
           if (ir->opr1->flag & VRF_CONST) {
             insert_const_mov(&ir->opr1, ra, irs, j++);
-          }
-          if (ir->opr2->flag & VRF_CONST) {
+          } else if (ir->opr2->flag & VRF_CONST) {
             insert_const_mov(&ir->opr2, ra, irs, j++);
           }
           break;
