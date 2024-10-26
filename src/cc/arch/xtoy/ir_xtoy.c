@@ -243,38 +243,46 @@ static void ei_sub(IR *ir) {
 }*/
 
 // Only works for opr1 and opr2 are in [0, INT16_MAX]
-// TODO: Support const opr2
 static void ei_mul(IR *ir) {
+  // Needs 5 registers:
+  // Final dst and tmpdst if dst != opr1/opr2: dst
+  // tmpdst if dst == opr1/opr2: TMP_1_REG
+  // source 1
+  // source 1 backup if dst != opr1/opr2: TMP_1_REG
+  // source 1 backup if dst == opr1/opr2: stack
+  // source 2
+  // constant 1: TMP_2_REG
   assert(!(ir->opr1->flag & VRF_CONST));
   assert(!(ir->opr2->flag & VRF_CONST));
   int pow = ir->dst->vsize;
   assert(0 <= pow && pow < 1);
+
+  bool overlap = ir->dst->phys == ir->opr1->phys || ir->dst->phys == ir->opr2->phys;
+
   const char *src1 = kReg16s[ir->opr1->phys];
+  const char *tmpsrc1 = overlap ? src1 : TMP_1_REG;
   const char *dst = kReg16s[ir->dst->phys];
+  const char *tmpdst = overlap ? TMP_1_REG : dst;
+  const char *one = TMP_2_REG;
 
-  const char *tmpdst;
-  if (ir->dst->phys == ir->opr1->phys || ir->dst->phys == ir->opr2->phys) {
-    tmpdst = TMP_1_REG;
-  } else {
-    tmpdst = dst;
-  }
   MOV(tmpdst, R0);
+  load_val(one, 1);
 
-  load_val(TMP_2_REG, 1);
+  if (overlap) {
+    // Needs 1 in a register anyway so loaded it above to skip START_PUSH
+    CONTINUE_PUSH(src1, one);
+  }
 
   const char *label_loop = fmt("%s%" PRIu16, "label_", labelCount);
   ++labelCount;
-  const char *label_loop_end = fmt("%s%" PRIu16, "label_", labelCount);
-  ++labelCount;
 
   EMIT_LABEL(label_loop);
-  BRZ(src1, label_loop_end);
   ADD(tmpdst, tmpdst, kReg16s[ir->opr2->phys]);
-  SUB(src1, src1, TMP_2_REG);
-  BRZ(R0, label_loop);
-  EMIT_LABEL(label_loop_end);
+  SUB(tmpsrc1, tmpsrc1, one);
+  BRP(tmpsrc1, label_loop);
 
-  if (ir->dst->phys == ir->opr1->phys || ir->dst->phys == ir->opr2->phys) {
+  if (overlap) {
+    CONTINUE_POP(src1, one);
     MOV(dst, tmpdst);
   }
 }
@@ -484,7 +492,7 @@ static void ei_jmp(IR *ir) {
         SUB(TMP_1_REG, TMP_1_REG, opr2); // opr1 > 0 && opr2 > 0, T = 1
         ADD(TMP_1_REG, TMP_1_REG, opr1); // opr1 > 0 && opr2 > 0, T = 1 - opr2
         BRP(TMP_1_REG, label_false);     // opr1 > 0 && opr2 > 0, T = 1 - opr2 + opr1
-        BRZ(R0, label_true);             // opr1 > 0 && opr2 > 0, T <= 0 => opr1 < opr2
+        BRZ(R0, label_true);             // opr1 > 0 && opr2 > 0 && T <= 0 => opr1 < opr2
 
         // opr1 == 0 cases:
         EMIT_LABEL(label_1ez);
@@ -543,7 +551,7 @@ static void ei_jmp(IR *ir) {
         SUB(TMP_1_REG, TMP_1_REG, opr2); // opr1 > 0 && opr2 > 0, T = 1
         ADD(TMP_1_REG, TMP_1_REG, opr1); // opr1 > 0 && opr2 > 0, T = 1 - opr2
         BRP(TMP_1_REG, label_true);      // opr1 > 0 && opr2 > 0, T = 1 - opr2 + opr1
-        // fallthrough to label_false       opr1 > 0 && opr2 > 0, T <= 0 => opr1 < opr2
+        // fallthrough to label_false       opr1 > 0 && opr2 > 0 && T <= 0 => opr1 < opr2
 
         free((char *)label_1gtz);
         free((char *)label_1ez);
@@ -803,7 +811,35 @@ void emit_bb_irs(BBContainer *bbcon) {
   }
 }
 
+static void insert_const_mov(VReg **pvreg, RegAlloc *ra, Vector *irs, int i) {
+  VReg *c = *pvreg;
+  VReg *tmp = reg_alloc_spawn(ra, c->vsize, c->flag & VRF_MASK);
+  IR *mov = new_ir_mov(tmp, c, ((IR*)irs->data[i])->flag);
+  vec_insert(irs, i, mov);
+  *pvreg = tmp;
+}
+
 void tweak_irs(FuncBackend *fnbe) {
-  UNUSED(fnbe);
   // TODO: Add tweaks as required
+  BBContainer *bbcon = fnbe->bbcon;
+  RegAlloc *ra = fnbe->ra;
+  for (int i = 0; i < bbcon->bbs->len; ++i) {
+    BB *bb = bbcon->bbs->data[i];
+    Vector *irs = bb->irs;
+    for (int j = 0; j < irs->len; ++j) {
+      IR *ir = irs->data[j];
+      switch (ir->kind) {
+        case IR_MUL:
+          assert(!(ir->opr1->flag & VRF_CONST) || !(ir->opr2->flag & VRF_CONST));
+          if (ir->opr1->flag & VRF_CONST) {
+            insert_const_mov(&ir->opr1, ra, irs, j++);
+          }
+          if (ir->opr2->flag & VRF_CONST) {
+            insert_const_mov(&ir->opr2, ra, irs, j++);
+          }
+          break;
+        default: break;
+      }
+    }
+  }
 }
